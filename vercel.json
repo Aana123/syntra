@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "src/app/api/ai/**": {
+      "maxDuration": 30
+    },
+    "src/app/api/simulate/**": {
+      "maxDuration": 30
+    }
+  }
+}
