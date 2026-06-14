@@ -25,6 +25,8 @@ const ProfileUpdateSchema = z.object({
   hoursStudied:       z.number().min(0).max(24).optional(),
   learningProfile:    z.string().max(100).optional(),
   archetype:          z.string().max(100).optional(),
+  skills:             z.string().max(500).optional(),
+  education:          z.string().max(500).optional(),
 });
 
 export async function GET() {
@@ -80,7 +82,7 @@ export async function PUT(req: Request) {
     const {
       name, age, avatarId, optimizationVector, personalMission, healthConstraints,
       gender, height, weight, averageSleep, workoutFrequency, activityLevel,
-      monthlyIncome, currentSavings, spendingStyle, hoursStudied, learningProfile, archetype,
+      monthlyIncome, currentSavings, spendingStyle, hoursStudied, learningProfile, archetype, skills, education,
     } = parsed.data;
 
     await connectDB();
@@ -122,6 +124,8 @@ export async function PUT(req: Request) {
       hoursStudied: typeof hoursStudied !== "undefined" ? Number(hoursStudied) : (user.profile?.hoursStudied || 3),
       learningProfile: typeof learningProfile !== "undefined" ? learningProfile : (user.profile?.learningProfile || ""),
       archetype: archetype || user.profile?.archetype || "",
+      skills: typeof skills !== "undefined" ? skills : (user.profile?.skills || ""),
+      education: typeof education !== "undefined" ? education : (user.profile?.education || ""),
     };
 
     // 3. Recalculate twin potentials dynamically matching onboarding parameters

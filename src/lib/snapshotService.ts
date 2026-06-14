@@ -12,6 +12,12 @@ import { Logger } from "@/lib/logger";
 import { generateaitwinReflection } from "@/lib/prompts/aitwinReflection";
 
 
+// ── In-process generation lock ──────────────────────────────────
+// Prevents concurrent Gemini calls for the same user when both the
+// background snapshotService and the /api/ai/recommend endpoint fire
+// at the same time (e.g. user uploads a file then immediately visits Insights).
+const _inFlight = new Set<string>();
+
 /**
  * Asynchronously generates a fresh AI twin reflection and stores it as a cached snapshot.
  * Destined to run as a background promise to ensure standard log/CSV submissions return immediately.
@@ -21,6 +27,15 @@ export async function generateAndStoreSnapshot(
   preFetchedUser?: any,
   preFetchedLogs?: any[]
 ): Promise<void> {
+  const userKey = userId.toString();
+
+  // Lock: skip if a generation is already in-flight for this user
+  if (_inFlight.has(userKey)) {
+    console.log(`[Snapshot Service] Generation already in-flight for user ${userKey} — skipping duplicate.`);
+    return;
+  }
+  _inFlight.add(userKey);
+
   const startTime = performance.now(); // ⏱️ Start stopwatch
   try {
     await connectDB();
@@ -29,6 +44,11 @@ export async function generateAndStoreSnapshot(
       console.warn(`[Snapshot Service] User not found for ID: ${userId}`);
       return;
     }
+    if (user.aiSnapshot?.lastGeneratedAt && (Date.now() - new Date(user.aiSnapshot.lastGeneratedAt).getTime() < 30 * 1000)) {
+      console.log(`[Snapshot Service] Reflection generated within last 30 seconds for user ${userKey} — skipping duplicate.`);
+      return;
+    }
+
 
 
 
@@ -75,10 +95,14 @@ export async function generateAndStoreSnapshot(
         confidence: confidence
       };
       
-      user.aiSnapshot = {
-        dailyReflection: stableReflection,
-        lastGeneratedAt: new Date(),
-      };
+      if (!user.aiSnapshot) {
+        user.aiSnapshot = {
+          dailyReflection: null,
+          lastGeneratedAt: null,
+        };
+      }
+      user.aiSnapshot.dailyReflection = stableReflection;
+      user.aiSnapshot.lastGeneratedAt = new Date();
       await user.save();
 
       const latency = performance.now() - startTime; // ⏱️ Stop stopwatch
@@ -111,10 +135,14 @@ export async function generateAndStoreSnapshot(
     );
 
     // 3. Cache the validated Gemini reflection in the User Document
-    user.aiSnapshot = {
-      dailyReflection: aiResponse,
-      lastGeneratedAt: new Date(),
-    };
+    if (!user.aiSnapshot) {
+      user.aiSnapshot = {
+        dailyReflection: null,
+        lastGeneratedAt: null,
+      };
+    }
+    user.aiSnapshot.dailyReflection = aiResponse;
+    user.aiSnapshot.lastGeneratedAt = new Date();
     await user.save();
 
     const latency = performance.now() - startTime; // ⏱️ Stop stopwatch
@@ -129,5 +157,8 @@ export async function generateAndStoreSnapshot(
 
   } catch (error: any) {
     console.error(`[Snapshot Service ERROR] Pre-generating AI reflection failed for user ${userId}:`, error);
+  } finally {
+    // Always release the lock so future calls aren't permanently blocked
+    _inFlight.delete(userKey);
   }
 }

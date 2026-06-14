@@ -329,6 +329,7 @@ export default function ProfilePage() {
 
   const { data: profileRes, mutate: mutateProfile } = useSWR<any>("/api/profile", fetcher);
   const { data: dashData }                           = useSWR<any>("/api/dashboard", fetcher, { dedupingInterval:60000, revalidateOnFocus:true });
+  const { data: latestLogsRes }                      = useSWR<any>("/api/log/latest", fetcher);
 
   const [profile, setProfile] = useState({
     name:"", email:"", age:"", avatarId:"1",
@@ -339,6 +340,8 @@ export default function ProfilePage() {
     customHealthConstraint:"",
     monthlyIncome:"", currentSavings:"", spendingStyle:"3",
     hoursStudied:"3", learningProfile:"", archetype:"", personalMission:"",
+    skills:"",
+    education:"",
   });
 
   const [editMode,             setEditMode]             = useState(false);
@@ -360,6 +363,8 @@ export default function ProfilePage() {
   const [editLearning,         setEditLearning]         = useState("");
   const [editArchetype,        setEditArchetype]        = useState("");
   const [editMission,          setEditMission]          = useState("");
+  const [editSkills,           setEditSkills]           = useState("");
+  const [editEducation,        setEditEducation]        = useState("");
 
   const [credsOpen,    setCredsOpen]    = useState(false);
   const [currentPw,    setCurrentPw]    = useState("");
@@ -399,6 +404,8 @@ export default function ProfilePage() {
         learningProfile: p.learningProfile||"",
         archetype: p.archetype||"",
         personalMission: u.personalMission||"",
+        skills: p.skills||"",
+        education: p.education||"",
       });
     } else if (session?.user) {
       setProfile(p => ({ ...p, name:session.user?.name||"", email:session.user?.email||"" }));
@@ -491,6 +498,8 @@ export default function ProfilePage() {
     setEditSpending(profile.spendingStyle); setEditStudy(profile.hoursStudied);
     setEditLearning(profile.learningProfile); setEditArchetype(profile.archetype);
     setEditMission(profile.personalMission); setEditMode(true);
+    setEditSkills(profile.skills);
+    setEditEducation(profile.education);
   };
 
   const handleEditSave = async () => {
@@ -514,6 +523,8 @@ export default function ProfilePage() {
           spendingStyle:Number(editSpending)||3,
           hoursStudied:Number(editStudy)||3,
           learningProfile:editLearning, archetype:editArchetype,
+          skills:editSkills,
+          education:editEducation,
         }),
       });
       const d = await res.json();
@@ -842,7 +853,15 @@ export default function ProfilePage() {
                             </select>
                           </div>
                         </div>
-                        <div className="form-group">
+                        <div className="form-group" style={{ marginTop: 12 }}>
+                          <label className="form-label">Education / Degree</label>
+                          <input className="form-input" value={editEducation} onChange={e=>setEditEducation(e.target.value)} placeholder="e.g. B.Tech Computer Science at IIT Delhi (2024)"/>
+                        </div>
+                        <div className="form-group" style={{ marginTop: 12 }}>
+                          <label className="form-label">Skills (comma-separated)</label>
+                          <input className="form-input" value={editSkills} onChange={e=>setEditSkills(e.target.value)} placeholder="e.g. Python, React, TypeScript, Product Management"/>
+                        </div>
+                        <div className="form-group" style={{ marginTop: 12 }}>
                           <label className="form-label">Daily Study / Work Hours — {editStudy}h</label>
                           <input className="form-slider" type="range" min="0" max="14" step="0.5" value={editStudy} onChange={e=>setEditStudy(e.target.value)}/>
                         </div>
@@ -877,13 +896,34 @@ export default function ProfilePage() {
                       <div className="section-divider-label" style={{ color:"#0066FF",marginTop:18,marginBottom:6 }}><Briefcase size={11}/> Career & Habits</div>
                       <InfoRow icon={Zap}       label="Current Situation" value={learnLabel(profile.learningProfile)}/>
                       <div className="info-divider"/>
-                      <InfoRow icon={BookOpen}  label="Focus Archetype"   value={profile.archetype==="chronos"?"Chronos — Learning & Growth":profile.archetype==="apex"?"Apex — Productivity & Discipline":profile.archetype==="nexus"?"Nexus — Wealth & Planning":profile.archetype==="titan"?"Titan — Fitness & Energy":(profile.archetype||"")}/>
+                      <InfoRow icon={BookOpen}  label="Education"         value={profile.education}/>
+                      <div className="info-divider"/>
+                      <InfoRow icon={Award}     label="Focus Archetype"   value={profile.archetype==="chronos"?"Chronos — Learning & Growth":profile.archetype==="apex"?"Apex — Productivity & Discipline":profile.archetype==="nexus"?"Nexus — Wealth & Planning":profile.archetype==="titan"?"Titan — Fitness & Energy":(profile.archetype||"")}/>
                       <div className="info-divider"/>
                       <InfoRow icon={Target}    label="Daily Study Hours" value={profile.hoursStudied?`${profile.hoursStudied}h/day`:""}/>
+                      {profile.skills && (
+                        <>
+                          <div className="info-divider"/>
+                          <div className="info-row" style={{ display: "block", background: "transparent" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                              <div className="info-icon" style={{ background: "rgba(0, 102, 255, 0.08)" }}><Sparkles size={14} color="#0066FF"/></div>
+                              <span className="info-label">Extracted Skills</span>
+                            </div>
+                            <div className="skills-badge-list" style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingLeft: 42 }}>
+                              {profile.skills.split(",").map(s => s.trim()).filter(s => s.length > 0).map((skill, idx) => (
+                                <span key={idx} className="skill-badge-tag">
+                                  {skill}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
+              
             </div>
 
             {/* ══════════════════════════════════════
@@ -1195,6 +1235,25 @@ const CSS = `
   .pw-toggle:hover { color:var(--brand); }
   .pw-submit { width:100%; background:var(--brand); border:none; border-radius:11px; padding:12px; color:#fff; font-size:0.85rem; font-weight:700; cursor:pointer; transition:all 0.18s; font-family:"Inter",sans-serif; margin-top:4px; }
   .pw-submit:hover { background:#0036BB; transform:translateY(-1px); box-shadow:0 5px 18px rgba(0,71,212,0.28); }
+
+  .skill-badge-tag {
+    background: rgba(0, 102, 255, 0.08);
+    color: #0066FF;
+    border: 1.5px solid rgba(0, 102, 255, 0.16);
+    border-radius: 9999px;
+    padding: 4px 12px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+  }
+  .skill-badge-tag:hover {
+    background: rgba(0, 102, 255, 0.14);
+    border-color: rgba(0, 102, 255, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 102, 255, 0.08);
+  }
 
   /* ═══ RESPONSIVE ═══ */
   @media (max-width:960px) {

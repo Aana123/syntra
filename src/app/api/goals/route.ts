@@ -8,14 +8,28 @@ import { z } from "zod";
 
 
 const MilestoneSchema = z.object({
+  _id: z.string().optional(),
   text: z.string().min(1).max(200),
   completed: z.boolean().default(false),
 });
 
 const GoalCreateSchema = z.object({
   title:      z.string().min(1).max(200),
-  domain:     z.enum(["health", "finance", "career"]),
-  priority:   z.enum(["low", "medium", "high"]),
+  domain:     z.preprocess(
+    (val) => typeof val === "string" ? val.toLowerCase() : val,
+    z.enum(["health", "finance", "career"])
+  ),
+  priority:   z.preprocess(
+    (val) => {
+      if (typeof val === "string") {
+        const lower = val.toLowerCase();
+        if (lower === "med") return "medium";
+        return lower;
+      }
+      return val;
+    },
+    z.enum(["low", "medium", "high"])
+  ),
   targetDate: z.string().optional(),
   milestones: z.array(MilestoneSchema).max(20).optional(),
 });
@@ -109,21 +123,29 @@ export async function PATCH(req: Request) {
 
     await connectDB();
 
-    const updateFields: Record<string, unknown> = {
-      "goals.$.title": title,
-      "goals.$.domain": domain,
-      "goals.$.priority": priority,
-      "goals.$.milestones": milestones || [],
-      "goals.$.targetDate": targetDate ? new Date(targetDate) : null,
-    };
+    const user = await User.findOne({ email: session.user.email });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
-    const user = await User.findOneAndUpdate(
-      { email: session.user.email, "goals._id": new mongoose.Types.ObjectId(String(goalId)) },
-      { $set: updateFields },
-      { new: true }
-    );
+    const goal = user.goals.find((g: any) => g._id?.toString() === goalId);
+    if (!goal) {
+      return NextResponse.json({ error: "Goal not found" }, { status: 404 });
+    }
 
-    return NextResponse.json({ success: true, goals: user?.goals });
+    // Update fields
+    goal.title = title;
+    goal.domain = domain;
+    goal.priority = priority;
+    goal.targetDate = targetDate ? new Date(targetDate) : undefined;
+    
+    // Convert and set milestones
+    goal.milestones = milestones || [];
+
+    user.markModified("goals");
+    await user.save();
+
+    return NextResponse.json({ success: true, goals: user.goals });
   } catch (error) {
     console.error("[GOALS PATCH ERROR]", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

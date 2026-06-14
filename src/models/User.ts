@@ -43,6 +43,8 @@ export interface IUser extends Document {
     hoursStudied?: number;
     learningProfile?: string;
     archetype?: string;
+    skills?: string;
+    education?: string;
   };
   scores: {
     health: number;
@@ -70,6 +72,8 @@ export interface IUser extends Document {
   aiSnapshot?: {
     dailyReflection: any;
     lastGeneratedAt: Date | null;
+    domainWidgets?: any;
+    widgetsGeneratedAt?: Date | null;
   };
   googleFit?: {
     accessToken: string;
@@ -168,11 +172,15 @@ const UserSchema = new Schema<IUser>(
       hoursStudied: { type: Number, default: 3 },
       learningProfile: { type: String, default: "" },
       archetype: { type: String, default: "" },
+      skills: { type: String, default: "" },
+      education: { type: String, default: "" },
     },
 
     aiSnapshot: {
       dailyReflection: { type: Object, default: null }, // Stores the parsed JSON
       lastGeneratedAt: { type: Date, default: null },   // Timestamp of last run
+      domainWidgets: { type: Object, default: null },   // Stores the domain breakdown widgets JSON
+      widgetsGeneratedAt: { type: Date, default: null }, // Timestamp of last widgets run
     },
     googleFit: {
       accessToken: { type: String },

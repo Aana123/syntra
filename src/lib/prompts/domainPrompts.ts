@@ -43,6 +43,209 @@ const DomainBaseSchema = z.object({
   supportingTrends: z.array(z.string()).min(1),
 });
 
+const HealthResponseSchema = z.object({
+  title: z.string().min(1),
+  insight: z.string().min(10),
+  recommendation: z.string().min(10),
+  confidence: z.number().int().min(0).max(100),
+  domainImpact: z.object({
+    health:  z.object({ score: z.number(), summary: z.string() }),
+    finance: z.object({ score: z.number(), summary: z.string() }),
+    career:  z.object({ score: z.number(), summary: z.string() }),
+  }),
+  reasoning: z.string().min(10),
+  supportingTrends: z.array(z.string()).min(1),
+  sleepDebtAnalysis: z.object({
+    currentDebtHours: z.number(),
+    recoveryPlan: z.string().min(5),
+    cognitiveImpactEstimate: z.string().min(5),
+  }),
+  workoutPlan: z.object({
+    weeklySchedule: z.array(z.object({
+      day: z.string().min(2),
+      activity: z.string().min(2),
+      duration: z.number(),
+      intensity: z.enum(["low", "moderate", "high"]),
+      rpeTarget: z.number(),
+      notes: z.string(),
+    })),
+    focusAreas: z.array(z.string()),
+    estimatedCalorieBurn: z.number(),
+    progressionStrategy: z.string().min(5),
+  }),
+  nutrientGapAnalysis: z.object({
+    deficiencies: z.array(z.object({
+      nutrient: z.string().min(2),
+      severity: z.enum(["mild", "moderate", "significant"]),
+      evidenceFromLogs: z.string().min(2),
+      todaysFoodFix: z.string().min(2),
+      alternativeFoods: z.array(z.string()),
+      whyItMatters: z.string().min(5),
+    })),
+    todaysMealPlan: z.array(z.object({
+      meal: z.enum(["breakfast", "lunch", "dinner", "snack"]),
+      suggestion: z.string().min(2),
+      targetNutrient: z.string().min(2),
+      estimatedCalories: z.number(),
+      prepTimeMinutes: z.number(),
+    })),
+    weeklyNutritionSummary: z.string().min(5),
+    hydrationAssessment: z.string().min(5),
+  }),
+  nutritionPlan: z.object({
+    dailyCalorieTarget: z.number(),
+    macroSplit: z.object({ protein: z.number(), carbs: z.number(), fat: z.number() }),
+    mealSuggestions: z.array(z.object({
+      meal: z.enum(["breakfast", "lunch", "dinner", "snack"]),
+      suggestion: z.string().min(2),
+      estimatedCalories: z.number(),
+      prepTimeMinutes: z.number(),
+    })),
+    hydrationTarget: z.string().min(5),
+    avoidList: z.array(z.string()),
+    supplementConsiderations: z.array(z.string()),
+  }),
+});
+
+const FinanceResponseSchema = z.object({
+  title: z.string().min(1),
+  insight: z.string().min(10),
+  recommendation: z.string().min(10),
+  confidence: z.number().int().min(0).max(100),
+  domainImpact: z.object({
+    health:  z.object({ score: z.number(), summary: z.string() }),
+    finance: z.object({ score: z.number(), summary: z.string() }),
+    career:  z.object({ score: z.number(), summary: z.string() }),
+  }),
+  reasoning: z.string().min(10),
+  supportingTrends: z.array(z.string()).min(1),
+  financialHealthScore: z.object({
+    emergencyFundMonths: z.number(),
+    debtToIncomeRatio: z.number(),
+    savingsRateGrade: z.enum(["A", "B", "C", "D", "F"]),
+    fireNumber: z.number(),
+    yearsToFIRE: z.number(),
+  }),
+  investmentStrategy: z.object({
+    suggestedAllocation: z.array(z.object({
+      type: z.string().min(2),
+      allocation: z.number(),
+      riskTolerance: z.enum(["low", "medium", "high"]),
+      monthlyAmount: z.number(),
+      specificProduct: z.string().min(2),
+    })),
+    rationale: z.string().min(5),
+    expectedMonthlyReturn: z.string().min(2),
+    riskLevel: z.enum(["low", "medium", "high"]),
+    taxSavingOpportunity: z.string().min(5),
+  }),
+  expenseOptimizations: z.array(z.object({
+    category: z.string().min(2),
+    currentSpend: z.number(),
+    suggestedSpend: z.number(),
+    savingsPerMonth: z.number(),
+    tip: z.string().min(5),
+    implementationMethod: z.string().min(5),
+  })),
+  creditCardRecommendation: z.string().nullable(),
+  insuranceSuggestions: z.array(z.string()),
+  debtStrategy: z.string().nullable(),
+  wealthGoalPlan: z.array(z.object({
+    goalLabel: z.string().min(2),
+    goalType: z.string(),
+    targetAmount: z.number(),
+    downPaymentRequired: z.number(),
+    monthsToGoal: z.number(),
+    monthsToGoalOptimised: z.number(),
+    requiredMonthlySaving: z.number(),
+    currentMonthlySurplus: z.number(),
+    gap: z.number(),
+    spendingAdjustments: z.array(z.object({
+      category: z.string().min(2),
+      currentAmount: z.number(),
+      recommendedAmount: z.number(),
+      monthlySaving: z.number(),
+      suggestion: z.string().min(5),
+    })),
+    investmentVehicle: z.string().min(2),
+    loanDetails: z.object({
+      estimatedEMI: z.number(),
+      loanAmount: z.number(),
+      tenureYears: z.number(),
+      eligibilityNote: z.string(),
+    }).optional(),
+    milestones: z.array(z.object({
+      label: z.string().min(2),
+      targetDate: z.string().min(2),
+      amountNeeded: z.number(),
+    })),
+    feasibilityVerdict: z.enum(["achievable", "achievable_with_cuts", "needs_income_growth", "not_feasible"]),
+    oneLineSummary: z.string().min(5),
+  })),
+});
+
+const CareerResponseSchema = z.object({
+  title: z.string().min(1),
+  insight: z.string().min(10),
+  recommendation: z.string().min(10),
+  confidence: z.number().int().min(0).max(100),
+  domainImpact: z.object({
+    health:  z.object({ score: z.number(), summary: z.string() }),
+    finance: z.object({ score: z.number(), summary: z.string() }),
+    career:  z.object({ score: z.number(), summary: z.string() }),
+  }),
+  reasoning: z.string().min(10),
+  supportingTrends: z.array(z.string()).min(1),
+  careerReadinessScore: z.object({
+    technicalReadiness: z.number(),
+    portfolioReadiness: z.number(),
+    consistencyScore: z.number(),
+    estimatedTimeToGoal: z.string().min(2),
+    salaryGrowthPotential: z.string().min(2),
+  }),
+  skillGapAnalysis: z.array(z.object({
+    skill: z.string().min(2),
+    currentLevel: z.enum(["none", "beginner", "intermediate", "advanced"]),
+    requiredLevel: z.enum(["beginner", "intermediate", "advanced", "expert"]),
+    priority: z.enum(["low", "medium", "high", "critical"]),
+    paretoImpact: z.string().min(5),
+    suggestedResource: z.string().min(2),
+    estimatedHoursToLevel: z.number(),
+  })),
+  learningPath: z.object({
+    phases: z.array(z.object({
+      week: z.string().min(2),
+      focus: z.string().min(2),
+      dailyTimeCommitment: z.string().min(2),
+      resources: z.array(z.string()),
+      milestoneGoal: z.string().min(5),
+      checkpointTest: z.string().min(5),
+    })),
+    totalTimelineWeeks: z.number(),
+    estimatedOutcome: z.string().min(5),
+    consistencyRequirement: z.string().min(5),
+  }),
+  portfolioProjects: z.array(z.object({
+    title: z.string().min(2),
+    description: z.string().min(10),
+    techStack: z.array(z.string()),
+    skillsTargeted: z.array(z.string()),
+    estimatedDays: z.number(),
+    impact: z.string().min(5),
+    hiringSignal: z.string().min(5),
+    githubReadmeStructure: z.string().min(5),
+  })),
+  weeklySchedule: z.object({
+    studyBlocks: z.array(z.object({
+      day: z.string().min(2),
+      time: z.string().min(5),
+      duration: z.string().min(2),
+      focus: z.string().min(2),
+    })),
+    consistencyTip: z.string().min(5),
+  }),
+});
+
 const SimulatorResponseSchema = z.object({
   scenarioTitle: z.string().min(1),
   primaryOutcome: z.string().min(10),
@@ -390,12 +593,12 @@ RETURN ONLY THIS JSON - NO TEXT OUTSIDE THE BRACES:
 
 export async function generateHealthAnalysis(input: HealthDomainInput): Promise<HealthDomainResponse> {
   const raw = await callGemini<unknown>(buildHealthPrompt(input), {
-    temperature: 0.3,
-    maxTokens: 2500,
+    temperature: 0.25,
+    maxTokens: 3500,
   });
-  const check = DomainBaseSchema.safeParse(raw);
+  const check = HealthResponseSchema.safeParse(raw);
   if (!check.success) {
-    console.warn("[Health] Zod failed:", check.error.issues.map(e => `${e.path}: ${e.message}`).join("; "));
+    console.warn("[Health] Zod failed:", check.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; "));
   }
   return raw as HealthDomainResponse;
 }
@@ -779,11 +982,11 @@ export async function generateFinanceAnalysis(input: FinanceDomainInput): Promis
   };
   const raw = await callGemini<unknown>(buildFinancePrompt(safeInput), {
     temperature: 0.25,
-    maxTokens: 2500,
+    maxTokens: 3500,
   });
-  const check = DomainBaseSchema.safeParse(raw);
+  const check = FinanceResponseSchema.safeParse(raw);
   if (!check.success) {
-    console.warn("[Finance] Zod failed:", check.error.issues.map(e => `${e.path}: ${e.message}`).join("; "));
+    console.warn("[Finance] Zod failed:", check.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; "));
   }
   return raw as FinanceDomainResponse;
 }
@@ -1046,12 +1249,12 @@ export async function generateCareerAnalysis(input: CareerDomainInput): Promise<
     currentCourses: input.currentCourses.map(c => sanitizeForPrompt(c, 60)),
   };
   const raw = await callGemini<unknown>(buildCareerPrompt(safeInput), {
-    temperature: 0.35,
-    maxTokens: 2500,
+    temperature: 0.25,
+    maxTokens: 3500,
   });
-  const check = DomainBaseSchema.safeParse(raw);
+  const check = CareerResponseSchema.safeParse(raw);
   if (!check.success) {
-    console.warn("[Career] Zod failed:", check.error.issues.map(e => `${e.path}: ${e.message}`).join("; "));
+    console.warn("[Career] Zod failed:", check.error.issues.map(e => `${e.path.join(".")}: ${e.message}`).join("; "));
   }
   return raw as CareerDomainResponse;
 }

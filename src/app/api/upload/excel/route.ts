@@ -10,6 +10,12 @@ import * as xlsx from "xlsx";
 import { generateAndStoreSnapshot } from "@/lib/snapshotService";
 import { apiHandler } from "@/lib/apiHandler";
 import { ApiError } from "@/lib/apiError";
+import { 
+  calculateHealthScore, 
+  calculateFinanceScore, 
+  calculateCareerScore, 
+  calculateEarnedXP 
+} from "@/lib/scoring";
 
 // Robust row-level validator
 function validateRow(domain: string, record: Record<string, any>, dateVal: string, rowIndex: number) {
@@ -246,14 +252,90 @@ export const POST = apiHandler(async (req: Request) => {
   // 1. Bulk insert the logs into MongoDB
   await Log.insertMany(parsedLogs);
 
-  // 2. Fire the protected background task
+  // 2. Exponential Trailing Moving Average recalculation on each imported record
+  const smoothingFactor = 0.25;
+  let currentScore = user.scores[domain as keyof typeof user.scores] || 50;
+
+  for (const log of parsedLogs) {
+    const data = log.domainData;
+    let newScore = 50;
+    if (domain === "health") {
+      newScore = calculateHealthScore(
+        Number(data.sleepHours) || 0,
+        Number(data.workoutMinutes) || 0,
+        Number(data.stressLevel) || 1,
+        typeof data.waterGlasses !== "undefined" ? Number(data.waterGlasses) : undefined
+      );
+    } else if (domain === "finance") {
+      newScore = calculateFinanceScore(
+        Number(data.amountSaved) || 0,
+        Number(data.discretionarySpent) || 0,
+        data.impulseSpend === true || String(data.impulseSpend).toLowerCase() === "true"
+      );
+    } else if (domain === "career") {
+      newScore = calculateCareerScore(
+        Number(data.hoursStudied) || 0,
+        Number(data.productivityRating) || 1
+      );
+    }
+    currentScore = Math.round((currentScore * (1 - smoothingFactor)) + (newScore * smoothingFactor));
+    user.gamification.totalPoints += calculateEarnedXP(currentScore);
+  }
+
+  // Update user score
+  user.scores[domain as keyof typeof user.scores] = currentScore;
+  user.gamification.totalPoints += 50; // Ingestion bonus
+
+  // Streak logic
+  const lastLog = user.gamification.lastLogDate ? new Date(user.gamification.lastLogDate) : null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (lastLog) lastLog.setHours(0, 0, 0, 0);
+
+  if (!lastLog || lastLog.getTime() !== today.getTime()) {
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    user.gamification.currentStreak = (lastLog && lastLog.getTime() === yesterday.getTime()) ? user.gamification.currentStreak + 1 : 1;
+    user.gamification.lastLogDate = new Date();
+  }
+
+  // Award badges
+  const newBadges: string[] = [];
+  const currentBadges = user.badges || [];
+
+  if (user.gamification.currentStreak >= 7 && !currentBadges.includes("Week Warrior")) {
+    newBadges.push("Week Warrior");
+  }
+  if (user.gamification.currentStreak >= 30 && !currentBadges.includes("Month Master")) {
+    newBadges.push("Month Master");
+  }
+  if (user.gamification.totalPoints >= 500 && !currentBadges.includes("Rising Twin")) {
+    newBadges.push("Rising Twin");
+  }
+  if (domain === "finance" && user.scores.finance >= 80 && !currentBadges.includes("Savings Streak")) {
+    newBadges.push("Savings Streak");
+  }
+  if (domain === "career" && user.scores.career >= 80 && !currentBadges.includes("Learning Machine")) {
+    newBadges.push("Learning Machine");
+  }
+
+  if (newBadges.length > 0) {
+    user.badges.push(...newBadges);
+  }
+
+  user.markModified("scores");
+  user.markModified("gamification");
+  user.markModified("badges");
+  await user.save();
+
+  // 3. Fire the protected background task (with the pre-fetched / updated user)
   waitUntil(
-    generateAndStoreSnapshot(user._id.toString()).catch(err => {
+    generateAndStoreSnapshot(user._id.toString(), user).catch(err => {
       console.error("[CRITICAL] Background Snapshot Failed:", err);
     })
   );
 
-  // 3. Return immediately to the user (Lightning fast UX!)
+  // 4. Return immediately to the user (Lightning fast UX!)
   return NextResponse.json({ 
     success: true, 
     message: `Successfully imported ${parsedLogs.length} logs. Syntra Core is analyzing the data.` 

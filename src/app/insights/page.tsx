@@ -28,6 +28,11 @@ import {
 import { useRouter } from "next/navigation";
 
 /* ─── TYPES ──────────────────────────────────────────────────────── */
+interface MealItem   { meal: string; items: string; prepTime: string; calories: number; fix: string; }
+interface CheckItem  { done: boolean; title: string; sub: string; }
+interface SkillItem  { skill: string; priority: string; hoursRequired: string; source: string; }
+interface StudyBlock { day: string; time: string; focus: string; }
+
 interface AIResponse {
   twinPrediction: string;
   dailyReflection: string;
@@ -36,6 +41,11 @@ interface AIResponse {
   recommendations: { health: string[]; finance: string[]; career: string[] };
   riskAlerts: string[];
   confidence: number;
+  domainWidgets?: {
+    health:   { todaysMealPlan:       MealItem[]; };
+    finance:  { smartMoneyChecklist: CheckItem[]; };
+    career:   { paretoSkills: SkillItem[]; studyBlocks: StudyBlock[]; };
+  };
 }
 
 /* ─── DESIGN TOKENS ──────────────────────────────────────────────── */
@@ -155,6 +165,12 @@ export default function InsightsPage() {
     dedupingInterval: 300000, revalidateOnFocus: false, errorRetryCount: 1,
   });
 
+  const { data: widgetsData, isLoading: widgetsLoading } = useSWR<any>(
+    activeSection === 1 ? "/api/ai/widgets" : null,
+    fetcher,
+    { dedupingInterval: 300000, revalidateOnFocus: false, errorRetryCount: 1 }
+  );
+
   useEffect(() => {
     const refresh = () => mutate();
     window.addEventListener("syntra-refresh", refresh);
@@ -263,11 +279,51 @@ export default function InsightsPage() {
 
       /* ── 1: DOMAIN BREAKDOWN ── */
       case 1: {
-        const healthData  = data?.health  || {};
         const financeData = data?.finance || {};
-        const careerData  = data?.career  || {};
-        const currentRecs = domainTab === "health" ? healthRecs : domainTab === "finance" ? financeRecs : careerRecs;
-        const domainColor = domainTab === "health" ? HEALTH_C : domainTab === "finance" ? FINANCE_C : CAREER_C;
+        const domainColor    = domainTab === "health" ? HEALTH_C : domainTab === "finance" ? FINANCE_C : CAREER_C;
+        const isWidgetsLoading = widgetsLoading && !widgetsData && !ai?.domainWidgets;
+
+        if (isWidgetsLoading) {
+          return (
+            <div className={`sec-wrap ${animating ? "sec-exit" : "sec-enter"}`}>
+              <SectionHeader icon={BarChart3} title="Health, Finance & Career Breakdown" sub="A closer look at each area of your life" color={domainColor}/>
+              
+              {/* Domain tab bar */}
+              <div className="domain-tabbar mb-24">
+                {([
+                  { key: "health",  label: "Health",  icon: HeartPulse,  color: HEALTH_C  },
+                  { key: "finance", label: "Finance", icon: Wallet,      color: FINANCE_C },
+                  { key: "career",  label: "Career",  icon: Briefcase,   color: CAREER_C  },
+                ] as const).map(t => (
+                  <button
+                    key={t.key}
+                    className={`domain-tab ${domainTab === t.key ? "domain-tab-on" : ""}`}
+                    style={domainTab === t.key ? {
+                      borderColor: t.color, background: `${t.color}10`, color: t.color,
+                      boxShadow: `0 4px 14px ${t.color}18`,
+                    } : {}}
+                    onClick={() => setDomainTab(t.key)}
+                  >
+                    <t.icon size={14}/> {t.label}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
+                <Loader2 size={30} style={{ color: domainColor, animation: "spin 1.1s linear infinite", marginBottom: 12 }}/>
+                <p style={{ fontSize: "0.85rem", color: "#52637A", fontWeight: 600 }}>Syncing personalised domain widgets...</p>
+              </div>
+            </div>
+          );
+        }
+
+        // All widget content comes from widgetsData?.widgets — personalised by Gemini
+        const widgetsSource  = widgetsData?.widgets || ai?.domainWidgets || {};
+        const mealPlan       = widgetsSource?.health?.todaysMealPlan       || [];
+        const checklist      = widgetsSource?.finance?.smartMoneyChecklist || [];
+        const paretoSkills   = widgetsSource?.career?.paretoSkills         || [];
+        const studyBlocks    = widgetsSource?.career?.studyBlocks          || [];
+        const currentRecs    = domainTab === "health" ? healthRecs : domainTab === "finance" ? financeRecs : careerRecs;
 
         return (
           <div className={`sec-wrap ${animating ? "sec-exit" : "sec-enter"}`}>
@@ -301,21 +357,28 @@ export default function InsightsPage() {
                   <div className="card-stripe" style={{ background: HEALTH_C }}/>
                   <div className="card-body-p">
                     <div className="widget-title" style={{ color: HEALTH_C }}><Sparkles size={13}/> Today's Meal Plan</div>
-                    <div className="meal-grid">
-                      {(healthData.todaysMealPlan || []).map((meal: any, i: number) => (
-                        <div key={i} className="meal-card" style={{ borderColor: `${HEALTH_C}18` }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                            <span style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: "0.88rem", color: "#0D1117" }}>{meal.meal}</span>
-                            <span className="badge" style={{ background: `${HEALTH_C}12`, color: HEALTH_C, border: `1px solid ${HEALTH_C}25` }}>{meal.calories} kcal</span>
+                    {mealPlan.length > 0 ? (
+                      <div className="meal-grid">
+                        {mealPlan.map((meal: MealItem, i: number) => (
+                          <div key={i} className="meal-card" style={{ borderColor: `${HEALTH_C}18` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                              <span style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: "0.88rem", color: "#0D1117" }}>{meal.meal}</span>
+                              <span className="badge" style={{ background: `${HEALTH_C}12`, color: HEALTH_C, border: `1px solid ${HEALTH_C}25` }}>{meal.calories} kcal</span>
+                            </div>
+                            <p style={{ margin: "0 0 10px", fontSize: "0.8rem", color: "#52637A", lineHeight: 1.55, fontWeight: 500 }}>{meal.items}</p>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.71rem", fontWeight: 700, color: "#94A3B8", borderTop: "1px solid #F0F2F8", paddingTop: 8 }}>
+                              <span>⏱ {meal.prepTime}</span>
+                              <span style={{ color: BRAND }}>✨ {meal.fix}</span>
+                            </div>
                           </div>
-                          <p style={{ margin: "0 0 10px", fontSize: "0.8rem", color: "#52637A", lineHeight: 1.55, fontWeight: 500 }}>{meal.items}</p>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.71rem", fontWeight: 700, color: "#94A3B8", borderTop: "1px solid #F0F2F8", paddingTop: 8 }}>
-                            <span>⏱ {meal.prepTime}</span>
-                            <span style={{ color: BRAND }}>✨ {meal.fix}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: `${HEALTH_C}06`, borderRadius: 12, border: `1.5px dashed ${HEALTH_C}30` }}>
+                        <Activity size={14} style={{ color: HEALTH_C, flexShrink: 0 }}/>
+                        <span style={{ fontSize: "0.84rem", color: "#52637A", lineHeight: 1.6, fontWeight: 500 }}>Syntra is generating your personalised meal plan. Log your meals and health constraints to unlock this.</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <RecCard recs={currentRecs} color={HEALTH_C} title="Health Suggestions"/>
@@ -362,26 +425,29 @@ export default function InsightsPage() {
                   </div>
                 </div>
 
-                {/* Investment checklist */}
+                {/* AI-generated Smart Money Checklist */}
                 <div className="ins-card mb-20">
                   <div className="card-stripe" style={{ background: FINANCE_C }}/>
                   <div className="card-body-p">
                     <div className="widget-title" style={{ color: FINANCE_C }}><CheckCircle2 size={13}/> Smart Money Checklist</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {[
-                        { done: true,  title: "Index Fund Contributions",     sub: "Putting a share of savings into a broad index fund each week." },
-                        { done: true,  title: "Emergency Fund",               sub: "Three months of expenses kept in a liquid, accessible account." },
-                        { done: false, title: "Tax-Saving Investments (80C)", sub: "Investing in ELSS funds to reduce your annual tax bill." },
-                      ].map((item, i) => (
-                        <div key={i} className="check-row" style={item.done ? { borderLeft: `3px solid ${FINANCE_C}` } : {}}>
-                          <input type="checkbox" checked={item.done} readOnly style={{ marginTop: 3, flexShrink: 0 }}/>
-                          <div>
-                            <strong style={{ fontSize: "0.86rem", color: "#0D1117", display: "block", marginBottom: 2, fontFamily: '"DM Sans", sans-serif' }}>{item.title}</strong>
-                            <p style={{ margin: 0, fontSize: "0.78rem", color: "#52637A", fontWeight: 500 }}>{item.sub}</p>
+                    {checklist.length > 0 ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {checklist.map((item: CheckItem, i: number) => (
+                          <div key={i} className="check-row" style={item.done ? { borderLeft: `3px solid ${FINANCE_C}` } : {}}>
+                            <input type="checkbox" checked={item.done} readOnly style={{ marginTop: 3, flexShrink: 0 }}/>
+                            <div>
+                              <strong style={{ fontSize: "0.86rem", color: "#0D1117", display: "block", marginBottom: 2, fontFamily: '"DM Sans", sans-serif' }}>{item.title}</strong>
+                              <p style={{ margin: 0, fontSize: "0.78rem", color: "#52637A", fontWeight: 500 }}>{item.sub}</p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: `${FINANCE_C}06`, borderRadius: 12, border: `1.5px dashed ${FINANCE_C}30` }}>
+                        <Activity size={14} style={{ color: FINANCE_C, flexShrink: 0 }}/>
+                        <span style={{ fontSize: "0.84rem", color: "#52637A", lineHeight: 1.6, fontWeight: 500 }}>Syntra is building your personalised financial checklist. Log your spending and set goals to unlock this.</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <RecCard recs={currentRecs} color={FINANCE_C} title="Finance Suggestions"/>
@@ -395,47 +461,61 @@ export default function InsightsPage() {
                   <div className="card-stripe" style={{ background: CAREER_C }}/>
                   <div className="card-body-p">
                     <div className="widget-title" style={{ color: CAREER_C }}><Target size={13}/> Skills Worth Your Time (80/20 Rule)</div>
-                    <div style={{ overflowX: "auto" }}>
-                      <table className="skill-table">
-                        <thead>
-                          <tr>
-                            <th>Skill</th>
-                            <th>Priority</th>
-                            <th>Time to Learn</th>
-                            <th>Where to Learn</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(careerData.paretoSkills || []).map((s: any, i: number) => (
-                            <tr key={i}>
-                              <td><strong style={{ color: "#0D1117" }}>{s.skill}</strong></td>
-                              <td><span className={`prio-badge prio-${s.priority?.toLowerCase()}`}>{s.priority}</span></td>
-                              <td style={{ color: "#52637A" }}>{s.hoursRequired}</td>
-                              <td style={{ color: BRAND, fontWeight: 700 }}>{s.source}</td>
+                    {paretoSkills.length > 0 ? (
+                      <div style={{ overflowX: "auto" }}>
+                        <table className="skill-table">
+                          <thead>
+                            <tr>
+                              <th>Skill</th>
+                              <th>Priority</th>
+                              <th>Time to Learn</th>
+                              <th>Where to Learn</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {paretoSkills.map((s: SkillItem, i: number) => (
+                              <tr key={i}>
+                                <td><strong style={{ color: "#0D1117" }}>{s.skill}</strong></td>
+                                <td><span className={`prio-badge prio-${s.priority?.toLowerCase()}`}>{s.priority}</span></td>
+                                <td style={{ color: "#52637A" }}>{s.hoursRequired}</td>
+                                <td style={{ color: BRAND, fontWeight: 700 }}>{s.source}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: `${CAREER_C}06`, borderRadius: 12, border: `1.5px dashed ${CAREER_C}30` }}>
+                        <Activity size={14} style={{ color: CAREER_C, flexShrink: 0 }}/>
+                        <span style={{ fontSize: "0.84rem", color: "#52637A", lineHeight: 1.6, fontWeight: 500 }}>Syntra is identifying your high-leverage skills. Log your courses and career goals to unlock this.</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Study blocks */}
+                {/* AI-generated Study Schedule */}
                 <div className="ins-card mb-20">
                   <div className="card-stripe" style={{ background: CAREER_C }}/>
                   <div className="card-body-p">
                     <div className="widget-title" style={{ color: CAREER_C }}><BookOpen size={13}/> Recommended Study Schedule</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {(careerData.studyBlocks || []).map((b: any, i: number) => (
-                        <div key={i} className="study-block">
-                          <div className="study-time" style={{ color: CAREER_C }}><Clock size={11}/> {b.time}</div>
-                          <div>
-                            <strong style={{ fontSize: "0.86rem", color: "#0D1117", fontFamily: '"DM Sans", sans-serif' }}>{b.day}</strong>
-                            <p style={{ margin: "2px 0 0", fontSize: "0.79rem", color: "#52637A", fontWeight: 500, lineHeight: 1.5 }}>{b.focus}</p>
+                    {studyBlocks.length > 0 ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {studyBlocks.map((b: StudyBlock, i: number) => (
+                          <div key={i} className="study-block">
+                            <div className="study-time" style={{ color: CAREER_C }}><Clock size={11}/> {b.time}</div>
+                            <div>
+                              <strong style={{ fontSize: "0.86rem", color: "#0D1117", fontFamily: '"DM Sans", sans-serif' }}>{b.day}</strong>
+                              <p style={{ margin: "2px 0 0", fontSize: "0.79rem", color: "#52637A", fontWeight: 500, lineHeight: 1.5 }}>{b.focus}</p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: `${CAREER_C}06`, borderRadius: 12, border: `1.5px dashed ${CAREER_C}30` }}>
+                        <Activity size={14} style={{ color: CAREER_C, flexShrink: 0 }}/>
+                        <span style={{ fontSize: "0.84rem", color: "#52637A", lineHeight: 1.6, fontWeight: 500 }}>Syntra is building your personalised study schedule. Log your study hours to unlock this.</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <RecCard recs={currentRecs} color={CAREER_C} title="Career Suggestions"/>
@@ -588,12 +668,19 @@ function RecCard({ recs, color, title }: { recs: string[]; color: string; title:
       <div className="card-body-p">
         <div className="widget-title" style={{ color }}><Lightbulb size={13}/> {title}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-          {recs.map((rec, i) => (
+          {recs && recs.length > 0 ? recs.map((rec, i) => (
             <div key={i} className="rec-row" style={{ borderLeft: `3px solid ${color}30`, background: `${color}05` }}>
               <CheckCircle2 size={13} style={{ color, flexShrink: 0, marginTop: 2 }}/>
               <span style={{ fontSize: "0.86rem", color: "#0D1117", lineHeight: 1.6, fontWeight: 500 }}>{rec}</span>
             </div>
-          ))}
+          )) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: `${color}06`, borderRadius: 12, border: `1.5px dashed ${color}30` }}>
+              <Activity size={14} style={{ color, flexShrink: 0 }}/>
+              <span style={{ fontSize: "0.84rem", color: "#52637A", lineHeight: 1.6, fontWeight: 500 }}>
+                Syntra is still building your personalised suggestions. Log more daily data to unlock specific actions here.
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

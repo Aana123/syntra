@@ -262,7 +262,7 @@ Analyze this mathematical projection:
 
 Deliver a highly concise, hacker-terminal style monospace analysis of this cross-domain feedback loop in exactly 2 sentences. Refer to the user as Operator. Avoid fluff or greetings.
 `;
-        aiMonospaceReport = await callGemini<string>(aiPrompt);
+        aiMonospaceReport = await callGemini<string>(aiPrompt, { temperature: 0.3, maxTokens: 150 });
       } catch (err) {
         console.error("Gemini Terminal simulation failed:", err);
       }
@@ -316,7 +316,7 @@ Weekly Averages: Sleep ${twinContext.weeklyAverages.sleep}hrs, Stress ${twinCont
 Address the user as 'Operator'. Speak in a concise, command-line system-report format. Keep your response under 100 words. Provide helpful, actionable advice about their goals, scores, or behavioral flags. Respond as if printing directly to a hacker terminal.
 `;
       const chatPrompt = `${systemPrompt}\n\nOperator Input: ${userQuery}`;
-      aiOutput = await callGemini<string>(chatPrompt);
+      aiOutput = await callGemini<string>(chatPrompt, { temperature: 0.3, maxTokens: 200 });
     } catch (err) {
       console.error("Gemini AI Core call failed:", err);
       aiOutput = "[-] SYSTEM ERROR: Core neural connection timed out.";

@@ -763,7 +763,7 @@ export default function GoalsPage() {
   const startEdit = (g: Goal) => {
     resetForm();
     setEditId(g._id || null);
-    setTitle(g.title); setDomain(g.domain); setPriority(g.priority);
+    setTitle(g.title); setDomain(g.domain); setPriority(g.priority === "med" ? "medium" : g.priority);
     setTargetDate(g.targetDate ? new Date(g.targetDate).toISOString().split("T")[0] : "");
     setMilestones(g.milestones?.map(m => m.text) || []);
     setScreen("add-goal");
@@ -774,9 +774,32 @@ export default function GoalsPage() {
     setSaving(true); setMsg("");
     try {
       const isEdit = !!editId;
+      const originalGoal = isEdit ? goals.find(g => g._id === editId) : null;
+      
       const body = isEdit
-        ? { goalId:editId, title, domain, priority, targetDate:targetDate||undefined, milestones:milestones.map(m=>({text:m,completed:false})) }
-        : { title, domain, priority, targetDate:targetDate||undefined, milestones:milestones.map(m=>({text:m,completed:false})) };
+        ? {
+            goalId: editId,
+            title,
+            domain,
+            priority,
+            targetDate: targetDate || undefined,
+            milestones: milestones.map(mText => {
+              const orig = originalGoal?.milestones?.find(om => om.text === mText);
+              return {
+                _id: orig?._id,
+                text: mText,
+                completed: orig ? orig.completed : false
+              };
+            })
+          }
+        : {
+            title,
+            domain,
+            priority,
+            targetDate: targetDate || undefined,
+            milestones: milestones.map(mText => ({ text: mText, completed: false }))
+          };
+
       const res = await fetch("/api/goals", {
         method: isEdit ? "PATCH" : "POST",
         headers:{"Content-Type":"application/json"}, credentials:"include",
@@ -787,7 +810,7 @@ export default function GoalsPage() {
         mutate({ goals: d.goals }, false);
         setSaved(true);
         setTimeout(() => { resetForm(); setScreen("goals-list"); }, 1800);
-      } else setMsg(d.message || "Failed to save goal.");
+      } else setMsg(d.error || "Failed to save goal.");
     } catch { setMsg("Save failed. Please try again."); }
     finally { setSaving(false); }
   };

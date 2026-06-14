@@ -225,6 +225,7 @@ export default function LoginPage() {
           padding: 4px;
           border-radius: 6px;
           transition: color 0.2s;
+          z-index: 2;
         }
         .password-toggle:hover { color: #0055EE; }
 
@@ -526,9 +527,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="forgot-row">
-            <Link href="#" className="forgot-link">Forgot password?</Link>
-          </div>
+
 
           {error && (
             <div className="error-box">

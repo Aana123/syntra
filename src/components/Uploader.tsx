@@ -9,6 +9,37 @@ interface UploaderProps {
   onUploadSuccess?: (data: any) => void;
 }
 
+function formatIngestionError(errorMsg: any): string {
+  if (typeof errorMsg === "string" && errorMsg.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(errorMsg);
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].code) {
+        const formattedIssues = parsed.map((issue: any) => {
+          const pathStr = issue.path ? issue.path.join(".") : "";
+          const expected = issue.expected ? ` (expected ${issue.expected})` : "";
+          const pathPart = pathStr ? `Field '${pathStr}': ` : "";
+          return `${pathPart}${issue.message}${expected}`;
+        });
+        return `Validation Error: ${formattedIssues.join("; ")}`;
+      }
+    } catch (_) {
+      // Fallback
+    }
+  } else if (typeof errorMsg === "object" && errorMsg !== null) {
+    const arr = Array.isArray(errorMsg) ? errorMsg : [errorMsg];
+    if (arr.length > 0 && arr[0].code) {
+      const formattedIssues = arr.map((issue: any) => {
+        const pathStr = issue.path ? issue.path.join(".") : "";
+        const expected = issue.expected ? ` (expected ${issue.expected})` : "";
+        const pathPart = pathStr ? `Field '${pathStr}': ` : "";
+        return `${pathPart}${issue.message}${expected}`;
+      });
+      return `Validation Error: ${formattedIssues.join("; ")}`;
+    }
+  }
+  return String(errorMsg);
+}
+
 export default function Uploader({ onUploadSuccess }: UploaderProps) {
   const [dragActive, setDragActive] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>("idle");
@@ -31,7 +62,7 @@ export default function Uploader({ onUploadSuccess }: UploaderProps) {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-
+ 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       uploadFile(e.dataTransfer.files[0]);
     }
@@ -64,21 +95,43 @@ export default function Uploader({ onUploadSuccess }: UploaderProps) {
     const formData = new FormData();
     formData.append("file", file);
 
+    let cTimer: any = null;
+    let pTimer: any = null;
+
     try {
       // Step 1: Uploading
       setSyncState("uploading");
       
       // Step 2: Simulate classification and parsing updates for better user feedback
-      setTimeout(() => setSyncState("classifying"), 1200);
-      setTimeout(() => setSyncState("parsing"), 2500);
+      cTimer = setTimeout(() => setSyncState("classifying"), 1200);
+      pTimer = setTimeout(() => setSyncState("parsing"), 2500);
 
       const res = await fetch("/api/ingestion/upload", {
         method: "POST",
         body: formData,
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to process document.");
+      // Clear timers immediately once request finishes
+      if (cTimer) clearTimeout(cTimer);
+      if (pTimer) clearTimeout(pTimer);
+
+      let data: any = null;
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        try {
+          data = await res.json();
+        } catch (_) {}
+      }
+
+      if (!res.ok) {
+        if (data && data.error) {
+          throw new Error(formatIngestionError(data.error));
+        }
+        if (res.status === 404) {
+          throw new Error("Upload failed: The upload service returned a 404 Not Found error.");
+        }
+        throw new Error(`Upload failed with status code ${res.status}.`);
+      }
 
       setDocCategory(data.category);
       setSuccessMsg(data.message);
@@ -88,6 +141,8 @@ export default function Uploader({ onUploadSuccess }: UploaderProps) {
         onUploadSuccess(data);
       }
     } catch (err: any) {
+      if (cTimer) clearTimeout(cTimer);
+      if (pTimer) clearTimeout(pTimer);
       setErrorMsg(err.message || "An error occurred while uploading the document.");
       setSyncState("error");
     }
@@ -223,6 +278,7 @@ const CSS = `
     font-family: 'Inter', sans-serif;
     font-size: 0.76rem;
     color: #7788aa;
+    white-space: pre-wrap;
   }
   .drop-category {
     font-family: 'Inter', sans-serif;

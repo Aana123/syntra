@@ -11,6 +11,12 @@ const RequestSchema = z.object({
   priority: z.string().min(1),
 });
 
+// ── Strict output schema — prevents hallucinated extra items or wrong types ──
+const MilestonesOutputSchema = z
+  .array(z.string().min(3).max(80))
+  .min(4)
+  .max(6);
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
@@ -58,24 +64,32 @@ Rules:
 - Do NOT repeat the goal title in the milestones
 - Milestones should be in a natural progression from first to last
 
-Return ONLY a JSON array of 6 strings. No keys, no explanation.
+Return ONLY a JSON array of 6 strings. No keys, no explanation, no markdown.
 ["milestone 1", "milestone 2", "milestone 3", "milestone 4", "milestone 5", "milestone 6"]
 `.trim();
 
-    const suggestions = await callGemini<string[]>(prompt, {
-      temperature: 0.5,
+    const raw = await callGemini<unknown>(prompt, {
+      temperature: 0.2,  // Lowered from 0.5 — structured list doesn't need creativity
       maxTokens: 512,
     });
 
-    if (!Array.isArray(suggestions) || suggestions.length === 0) {
+    // Validate shape — prevents partial arrays, nested objects, or type errors
+    const check = MilestonesOutputSchema.safeParse(raw);
+    if (!check.success) {
+      console.warn("[milestones/suggest] Zod failed:", check.error.issues.map(e => `${e.path}: ${e.message}`).join("; "));
+      // Attempt recovery: if raw is an array of strings with at least 4 items, use it anyway
+      if (Array.isArray(raw) && raw.length >= 4 && raw.every(s => typeof s === "string")) {
+        const fallback = (raw as string[]).slice(0, 6).filter(s => s.trim().length > 0);
+        return NextResponse.json({ success: true, suggestions: fallback });
+      }
       throw new Error("Invalid suggestions format from AI");
     }
 
-    const clean = suggestions
-      .filter((s) => typeof s === "string" && s.trim().length > 0)
+    const suggestions = check.data
+      .filter((s) => s.trim().length > 0)
       .slice(0, 6);
 
-    return NextResponse.json({ success: true, suggestions: clean });
+    return NextResponse.json({ success: true, suggestions });
   } catch (err: any) {
     console.error("[milestones/suggest]", err);
     return NextResponse.json(

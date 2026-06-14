@@ -10,12 +10,30 @@ export const BloodReportSchema = z.object({
   metrics: z.array(
     z.object({
       name: z.string(), // e.g., "Hemoglobin", "Cholesterol", "TSH", "Vitamin D"
-      value: z.number(),
-      unit: z.string(),
+      value: z.preprocess((val) => {
+        if (typeof val === "number") return val;
+        if (typeof val === "string") {
+          const matched = val.replace(/,/g, "").match(/[-+]?[0-9]*\.?[0-9]+/);
+          if (matched) {
+            const num = parseFloat(matched[0]);
+            if (!isNaN(num)) return num;
+          }
+        }
+        return 0;
+      }, z.number().default(0)),
+      unit: z.preprocess((val) => typeof val === "string" ? val : "", z.string().default("")),
       referenceRange: z.string().optional(),
-      status: z.enum(["low", "normal", "high", "unknown"]),
+      status: z.preprocess((val) => {
+        if (typeof val !== "string") return "unknown";
+        const clean = val.trim().toLowerCase();
+        if (["low", "normal", "high", "unknown"].includes(clean)) return clean;
+        if (clean.includes("low") || clean.includes("deficient") || clean.includes("decrease") || clean.includes("borderline low")) return "low";
+        if (clean.includes("high") || clean.includes("elevated") || clean.includes("increase") || clean.includes("borderline high")) return "high";
+        if (clean.includes("normal") || clean.includes("optimal") || clean.includes("good") || clean.includes("ok")) return "normal";
+        return "unknown";
+      }, z.enum(["low", "normal", "high", "unknown"]).default("unknown")),
     })
-  ),
+  ).optional().default([]),
 });
 
 export const PrescriptionSchema = z.object({
@@ -39,13 +57,13 @@ export const HealthCheckupSchema = z.object({
   facilityName: z.string().optional(),
   checkupDate: z.string().optional(),
   vitals: z.object({
-    systolicBP: z.number().optional(),
-    diastolicBP: z.number().optional(),
-    heartRate: z.number().optional(),
-    temperature: z.number().optional(),
-    weight: z.number().optional(),
-    height: z.number().optional(),
-    bmi: z.number().optional(),
+    systolicBP: z.coerce.number().optional(),
+    diastolicBP: z.coerce.number().optional(),
+    heartRate: z.coerce.number().optional(),
+    temperature: z.coerce.number().optional(),
+    weight: z.coerce.number().optional(),
+    height: z.coerce.number().optional(),
+    bmi: z.coerce.number().optional(),
   }).optional(),
   summary: z.string().optional(),
   recommendations: z.array(z.string()).optional(),
@@ -55,18 +73,18 @@ export const FitnessAssessmentSchema = z.object({
   assessmentDate: z.string().optional(),
   trainerName: z.string().optional(),
   metrics: z.object({
-    vo2Max: z.number().optional(),
-    bodyFatPercent: z.number().optional(),
-    muscleMassPercent: z.number().optional(),
+    vo2Max: z.coerce.number().optional(),
+    bodyFatPercent: z.coerce.number().optional(),
+    muscleMassPercent: z.coerce.number().optional(),
     flexibilityScore: z.string().optional(), // e.g., "Excellent"
   }).optional(),
   strengthTests: z.array(
     z.object({
       exercise: z.string(), // e.g., "Squat", "Bench Press"
-      maxWeightKg: z.number().optional(),
-      reps: z.number().optional(),
+      maxWeightKg: z.coerce.number().optional(),
+      reps: z.coerce.number().optional(),
     })
-  ).optional(),
+  ).optional().default([]),
 });
 
 // ==========================================
@@ -76,43 +94,43 @@ export const FitnessAssessmentSchema = z.object({
 export const SalarySlipSchema = z.object({
   employer: z.string().optional(),
   payPeriod: z.string().optional(),
-  grossEarnings: z.number(),
-  netTakeHome: z.number(),
+  grossEarnings: z.coerce.number(),
+  netTakeHome: z.coerce.number(),
   allowances: z.array(
     z.object({
       name: z.string(),
-      amount: z.number(),
+      amount: z.coerce.number(),
     })
-  ).optional(),
+  ).optional().default([]),
   deductions: z.array(
     z.object({
       name: z.string(),
-      amount: z.number(),
+      amount: z.coerce.number(),
     })
-  ).optional(),
+  ).optional().default([]),
 });
 
 export const LoanDocumentSchema = z.object({
   bankName: z.string().optional(),
   loanType: z.string().optional(), // e.g., "Home Loan", "Car Loan"
-  principalAmount: z.number(),
-  interestRatePercent: z.number(),
-  termMonths: z.number(),
-  monthlyEMI: z.number().optional(),
+  principalAmount: z.coerce.number(),
+  interestRatePercent: z.coerce.number(),
+  termMonths: z.coerce.number(),
+  monthlyEMI: z.coerce.number().optional(),
   startDate: z.string().optional(),
 });
 
 export const CreditCardStatementSchema = z.object({
   cardIssuer: z.string().optional(),
   statementDate: z.string().optional(),
-  totalAmountDue: z.number(),
-  minimumAmountDue: z.number(),
+  totalAmountDue: z.coerce.number(),
+  minimumAmountDue: z.coerce.number(),
   paymentDueDate: z.string().optional(),
   transactions: z.array(
     z.object({
       date: z.string(),
       vendor: z.string(),
-      amount: z.number(),
+      amount: z.coerce.number(),
       category: z.string().optional(),
     })
   ),
@@ -120,14 +138,14 @@ export const CreditCardStatementSchema = z.object({
 
 export const StockPortfolioSchema = z.object({
   brokerName: z.string().optional(),
-  portfolioValue: z.number().optional(),
+  portfolioValue: z.coerce.number().optional(),
   holdings: z.array(
     z.object({
       symbol: z.string(), // e.g., "AAPL", "RELIANCE"
       companyName: z.string().optional(),
-      sharesCount: z.number(),
-      avgPricePaid: z.number(),
-      currentPrice: z.number().optional(),
+      sharesCount: z.coerce.number(),
+      avgPricePaid: z.coerce.number(),
+      currentPrice: z.coerce.number().optional(),
     })
   ),
 });
@@ -136,8 +154,8 @@ export const InsurancePolicySchema = z.object({
   insurerName: z.string().optional(),
   policyNumber: z.string().optional(),
   policyType: z.string().optional(), // e.g., "Health", "Life", "Car"
-  sumAssured: z.number(),
-  annualPremium: z.number(),
+  sumAssured: z.coerce.number(),
+  annualPremium: z.coerce.number(),
   validUntil: z.string().optional(),
 });
 
@@ -157,23 +175,28 @@ export const CertificationSchema = z.object({
 export const ResumeSchema = z.object({
   candidateName: z.string().optional(),
   contactEmail: z.string().optional(),
-  skills: z.array(z.string()),
+  skills: z.preprocess((val) => {
+    if (typeof val === "string") {
+      return val.split(",").map(s => s.trim()).filter(Boolean);
+    }
+    return val;
+  }, z.array(z.string()).optional().default([])),
   experienceYears: z.number().optional(),
   education: z.array(
     z.object({
-      degree: z.string(),
-      school: z.string(),
-      graduationYear: z.string().optional(),
+      degree: z.string().optional().default(""),
+      school: z.string().optional().default(""),
+      graduationYear: z.coerce.string().optional(),
     })
-  ),
+  ).optional().default([]),
   workHistory: z.array(
     z.object({
-      role: z.string(),
-      company: z.string(),
-      duration: z.string(),
+      role: z.string().optional().default(""),
+      company: z.string().optional().default(""),
+      duration: z.coerce.string().optional().default(""),
       description: z.string().optional(),
     })
-  ),
+  ).optional().default([]),
 });
 
 // Map of schema type to Zod object for dynamic validation router

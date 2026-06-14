@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { NetWorthPanel } from "@/components/NetWorthPanel";
@@ -11,6 +11,7 @@ import {
   Sparkles, Star, Bell, Settings, Search, LayoutDashboard,
   LineChart, Target, History, Plug, Edit3, Heart,
   Menu, X, ArrowLeft, ChevronRight, BarChart3,
+  RefreshCw, Check,
 } from "lucide-react";
 
 /* ─── TYPES ─────────────────────────────────────────────────────── */
@@ -281,28 +282,39 @@ function ProcessingScreen() {
 }
 
 /* ─── API SYNC PANEL ─────────────────────────────────────────────── */
-function ApiSyncPanel() {
-  const [googleFitConnected, setGoogleFitConnected] = useState(false);
-  const [googleFitLastSync, setGoogleFitLastSync] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+function ApiSyncPanel({
+  googleFitConnected,
+  setGoogleFitConnected,
+  googleFitLastSync,
+  setGoogleFitLastSync,
+  mockConnected,
+  setMockConnected,
+  mockSyncTimes,
+  setMockSyncTimes,
+  loading,
+  onSuccess
+}: {
+  googleFitConnected: boolean;
+  setGoogleFitConnected: React.Dispatch<React.SetStateAction<boolean>>;
+  googleFitLastSync: string | null;
+  setGoogleFitLastSync: React.Dispatch<React.SetStateAction<string | null>>;
+  mockConnected: { apple: boolean; bank: boolean; coursera: boolean; hungerbox: boolean };
+  setMockConnected: React.Dispatch<React.SetStateAction<{ apple: boolean; bank: boolean; coursera: boolean; hungerbox: boolean }>>;
+  mockSyncTimes: Record<string, string | null>;
+  setMockSyncTimes: React.Dispatch<React.SetStateAction<Record<string, string | null>>>;
+  loading: boolean;
+  onSuccess?: () => void;
+}) {
   const [disconnecting, setDisconnecting] = useState(false);
+  const [syncStatuses, setSyncStatuses] = useState<Record<string, "idle" | "syncing" | "synced" | "error">>({});
 
-  const [connected, setConnected] = useState({ apple: true, bank: false, coursera: false, hungerbox: false });
-
-  useEffect(() => {
-    fetch("/api/profile")
-      .then(r => r.json())
-      .then(data => {
-        if (data.success && data.user?.googleFit?.syncActive) {
-          setGoogleFitConnected(true);
-          if (data.user.googleFit.lastSyncedAt) {
-            setGoogleFitLastSync(fmtDate(data.user.googleFit.lastSyncedAt));
-          }
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+  const toggleMockIntegration = (key: keyof typeof mockConnected) => {
+    setMockConnected(p => {
+      const updated = { ...p, [key]: !p[key] };
+      localStorage.setItem("syntra_mock_integrations", JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const handleGoogleFitClick = () => {
     if (googleFitConnected) {
@@ -322,15 +334,62 @@ function ApiSyncPanel() {
     }
   };
 
+  const handleSync = (key: string, name: string, isReal: boolean) => {
+    setSyncStatuses(p => ({ ...p, [key]: "syncing" }));
+    
+    const url = isReal ? "/api/telemetry/sync" : "/api/ingestion/sync-prototype";
+    const body = isReal ? undefined : JSON.stringify({ connector: key });
+    
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      credentials: "include"
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          const nowStr = new Date().toISOString();
+          if (isReal) {
+            setGoogleFitLastSync(fmtDate(nowStr));
+          } else {
+            setMockSyncTimes(p => {
+              const updated = { ...p, [key]: nowStr };
+              localStorage.setItem("syntra_mock_sync_times", JSON.stringify(updated));
+              return updated;
+            });
+          }
+          setSyncStatuses(p => ({ ...p, [key]: "synced" }));
+          if (onSuccess) onSuccess();
+          
+          setTimeout(() => {
+            setSyncStatuses(p => ({ ...p, [key]: "idle" }));
+          }, 3000);
+        } else {
+          setSyncStatuses(p => ({ ...p, [key]: "error" }));
+          setTimeout(() => {
+            setSyncStatuses(p => ({ ...p, [key]: "idle" }));
+          }, 3000);
+        }
+      })
+      .catch((e) => {
+        console.error(e);
+        setSyncStatuses(p => ({ ...p, [key]: "error" }));
+        setTimeout(() => {
+          setSyncStatuses(p => ({ ...p, [key]: "idle" }));
+        }, 3000);
+      });
+  };
+
   const integrations = [
-    { key: "apple", name: "Apple Health", desc: "Sync sleep, activity, heart rate and wellness metrics.", icon: "❤️", color: "#ff3b30", bg: "#fff0f0", lastSync: "18 min ago", isReal: false },
+    { key: "apple", name: "Apple Health", desc: "Sync sleep, activity, heart rate and wellness metrics.", icon: "❤️", color: "#ff3b30", bg: "#fff0f0", lastSync: mockSyncTimes.apple ? fmtDate(mockSyncTimes.apple) : null, isReal: false },
     { key: "gfit", name: "Google Fit", desc: "Sync steps, workouts, calories and health metrics.", icon: "🏃", color: "#ea580c", bg: "#fff7ed", lastSync: googleFitLastSync, isReal: true, connected: googleFitConnected },
-    { key: "hungerbox", name: "HungerBox", desc: "Sync cafeteria orders, meal logs and nutrition history dynamically.", icon: "🍱", color: "#e11d48", bg: "#fff1f2", lastSync: null, isReal: false },
-    { key: "bank", name: "Bank Account", desc: "Sync transactions, savings and spending patterns via open banking.", icon: "🏦", color: "#16a34a", bg: "#f0fdf4", lastSync: null, isReal: false },
-    { key: "coursera", name: "Coursera", desc: "Sync completed courses, learning progress and certifications.", icon: "🎓", color: "var(--brand)", bg: "var(--brand-light)", lastSync: null, isReal: false },
+    { key: "hungerbox", name: "HungerBox", desc: "Sync cafeteria orders, meal logs and nutrition history dynamically.", icon: "🍱", color: "#e11d48", bg: "#fff1f2", lastSync: mockSyncTimes.hungerbox ? fmtDate(mockSyncTimes.hungerbox) : null, isReal: false },
+    { key: "bank", name: "Bank Account", desc: "Sync transactions, savings and spending patterns via open banking.", icon: "🏦", color: "#16a34a", bg: "#f0fdf4", lastSync: mockSyncTimes.bank ? fmtDate(mockSyncTimes.bank) : null, isReal: false },
+    { key: "coursera", name: "Coursera", desc: "Sync completed courses, learning progress and certifications.", icon: "🎓", color: "var(--brand)", bg: "var(--brand-light)", lastSync: mockSyncTimes.coursera ? fmtDate(mockSyncTimes.coursera) : null, isReal: false },
   ];
 
-  const totalConnected = (googleFitConnected ? 1 : 0) + Object.values(connected).filter(Boolean).length;
+  const totalConnected = (googleFitConnected ? 1 : 0) + Object.values(mockConnected).filter(Boolean).length;
 
   return (
     <div>
@@ -351,7 +410,7 @@ function ApiSyncPanel() {
         </div>
         <div className="integrations-grid">
           {integrations.map(intg => {
-            const isConn = intg.isReal ? intg.connected : connected[intg.key as keyof typeof connected];
+            const isConn = intg.isReal ? intg.connected : mockConnected[intg.key as keyof typeof mockConnected];
             return (
               <div key={intg.key} className="form-card" style={{ marginBottom:0 }}>
                 <div className="form-card-stripe" style={{ background: isConn ? `linear-gradient(90deg,${intg.color},${intg.color}99)` : "linear-gradient(90deg,#e2e8f2,#f0f4f8)" }} />
@@ -359,7 +418,18 @@ function ApiSyncPanel() {
                   <div style={{ display:"flex", alignItems:"flex-start", gap:12, marginBottom:12 }}>
                     <div style={{ width:46, height:46, borderRadius:13, background:intg.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"1.3rem", flexShrink:0 }}>{intg.icon}</div>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontFamily:"DM Sans,sans-serif", fontSize:"0.88rem", fontWeight:800, color:"var(--text-primary)", marginBottom:3 }}>{intg.name}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 3 }}>
+                        <span style={{ fontFamily:"DM Sans,sans-serif", fontSize:"0.88rem", fontWeight:800, color:"var(--text-primary)" }}>{intg.name}</span>
+                        <span 
+                          style={{
+                            fontSize: "0.85rem",
+                            cursor: intg.isReal ? "default" : "help"
+                          }}
+                          title={intg.isReal ? "Live Integration" : "Prototype Connector: Uses representative telemetry data matching the source platform schema."}
+                        >
+                          {intg.isReal ? "🟢" : "🟡"}
+                        </span>
+                      </div>
                       <div style={{ fontSize:"0.72rem", color:"var(--text-secondary)", lineHeight:1.45 }}>{intg.desc}</div>
                     </div>
                   </div>
@@ -367,23 +437,66 @@ function ApiSyncPanel() {
                     <span className={`badge-dot ${isConn ? "dot-green" : "dot-gray"}`} />
                     {isConn ? "Connected" : "Not connected"}
                   </span>
+
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop:13, borderTop:"1px solid var(--border)", marginTop:12 }}>
                     <span style={{ fontSize:"0.68rem", color:"var(--text-muted)", fontWeight:500 }}>
                       {intg.lastSync ? `Synced ${intg.lastSync}` : "Never synced"}
                     </span>
-                    <button
-                      className={`btn-sm ${isConn ? "btn-sm-ghost" : "btn-sm-primary"}`}
-                      disabled={intg.isReal && (loading || disconnecting)}
-                      onClick={() => {
-                        if (intg.isReal) {
-                          handleGoogleFitClick();
-                        } else {
-                          setConnected(p => ({ ...p, [intg.key]: !p[intg.key as keyof typeof connected] }));
-                        }
-                      }}
-                    >
-                      <Plug size={11} /> {intg.isReal && disconnecting ? "Disconnecting..." : isConn ? "Disconnect" : "Connect"}
-                    </button>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        className="btn-sm"
+                        disabled={!isConn || syncStatuses[intg.key] === "syncing"}
+                        onClick={() => handleSync(intg.key, intg.name, intg.isReal)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          backgroundColor: !isConn 
+                            ? "#e2e8f0" 
+                            : syncStatuses[intg.key] === "synced" 
+                              ? "#22c55e" 
+                              : "var(--brand)",
+                          color: !isConn 
+                            ? "var(--text-muted)" 
+                            : "#fff",
+                          border: "none",
+                          cursor: !isConn ? "not-allowed" : "pointer",
+                          transition: "background-color 0.2s"
+                        }}
+                      >
+                        {syncStatuses[intg.key] === "syncing" ? (
+                          <>
+                            <RefreshCw className="spin" size={11} />
+                            <span>Syncing...</span>
+                          </>
+                        ) : syncStatuses[intg.key] === "synced" ? (
+                          <>
+                            <Check size={11} />
+                            <span>Synced</span>
+                          </>
+                        ) : syncStatuses[intg.key] === "error" ? (
+                          <span>Failed</span>
+                        ) : (
+                          <>
+                            <RefreshCw size={11} />
+                            <span>Sync</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        className={`btn-sm ${isConn ? "btn-sm-ghost" : "btn-sm-primary"}`}
+                        disabled={intg.isReal && (loading || disconnecting)}
+                        onClick={() => {
+                          if (intg.isReal) {
+                            handleGoogleFitClick();
+                          } else {
+                            toggleMockIntegration(intg.key as any);
+                          }
+                        }}
+                      >
+                        <Plug size={11} /> {intg.isReal && disconnecting ? "Disconnecting..." : isConn ? "Disconnect" : "Connect"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -393,6 +506,38 @@ function ApiSyncPanel() {
       </div>
     </div>
   );
+}
+
+/* ─── ERROR FORMATTING HELPER ────────────────────────────────────── */
+function formatIngestionError(errorMsg: any): string {
+  if (typeof errorMsg === "string" && errorMsg.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(errorMsg);
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].code) {
+        const formattedIssues = parsed.map((issue: any) => {
+          const pathStr = issue.path ? issue.path.join(".") : "";
+          const expected = issue.expected ? ` (expected ${issue.expected})` : "";
+          const pathPart = pathStr ? `Field '${pathStr}': ` : "";
+          return `${pathPart}${issue.message}${expected}`;
+        });
+        return `Validation Error: ${formattedIssues.join("; ")}`;
+      }
+    } catch (_) {
+      // Fallback to original string
+    }
+  } else if (typeof errorMsg === "object" && errorMsg !== null) {
+    const arr = Array.isArray(errorMsg) ? errorMsg : [errorMsg];
+    if (arr.length > 0 && arr[0].code) {
+      const formattedIssues = arr.map((issue: any) => {
+        const pathStr = issue.path ? issue.path.join(".") : "";
+        const expected = issue.expected ? ` (expected ${issue.expected})` : "";
+        const pathPart = pathStr ? `Field '${pathStr}': ` : "";
+        return `${pathPart}${issue.message}${expected}`;
+      });
+      return `Validation Error: ${formattedIssues.join("; ")}`;
+    }
+  }
+  return String(errorMsg);
 }
 
 /* ─── UPLOADS PANEL ──────────────────────────────────────────────── */
@@ -408,15 +553,43 @@ function UploadsPanel({ onSuccess }: { onSuccess: () => void }) {
     setUploadLoading(true); setUploadMsg(null);
     const fd = new FormData(); fd.append("file", uploadFile); fd.append("domain", uploadDomain);
     try {
-      const res = await fetch(uploadFile.name.endsWith(".csv") ? "/api/upload/csv" : "/api/upload/excel", { method: "POST", body: fd, credentials: "include" });
-      const d = await res.json();
-      if (!res.ok || !d.success) throw new Error(d.message || "Upload failed.");
-      setUploadMsg({ text: d.message || "File uploaded successfully!", ok: true });
+      let endpoint = "/api/upload/excel";
+      if (activeType === "pdf") {
+        endpoint = "/api/ingestion/upload";
+      } else if (activeType === "csv") {
+        endpoint = "/api/upload/csv";
+      }
+      const res = await fetch(endpoint, { method: "POST", body: fd, credentials: "include" });
+      
+      let d: any = null;
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        try {
+          d = await res.json();
+        } catch (_) {}
+      }
+
+      if (!res.ok) {
+        if (d && (d.message || d.error)) {
+          throw new Error(formatIngestionError(d.error || d.message));
+        }
+        if (res.status === 404) {
+          throw new Error(`Upload failed: The requested upload service is currently unavailable or down (Status 404).`);
+        }
+        throw new Error(`Upload failed with status code ${res.status}.`);
+      }
+
+      if (d && d.success === false) {
+        throw new Error(formatIngestionError(d.message || d.error || "Upload failed."));
+      }
+
+      setUploadMsg({ text: (d && d.message) || "File uploaded successfully!", ok: true });
       setUploadFile(null);
       onSuccess();
     } catch (err: any) { setUploadMsg({ text: err.message || "Upload failed.", ok: false }); }
     finally { setUploadLoading(false); }
   };
+
 
   const uploadTypes = [
     { key: "pdf", label: "PDF Upload", sub: "Reports, salary slips, receipts", icon: "📄", color: "#dc2626", bg: "#fef2f2" },
@@ -499,7 +672,7 @@ function UploadsPanel({ onSuccess }: { onSuccess: () => void }) {
 }
 
 /* ─── MAIN PAGE ──────────────────────────────────────────────────── */
-export default function IngestionPage() {
+function IngestionPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -512,12 +685,29 @@ export default function IngestionPage() {
   const [activePanel, setActivePanel] = useState<SidebarPanel>("manual");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const [googleFitConnected, setGoogleFitConnected] = useState(false);
+  const [googleFitLastSync, setGoogleFitLastSync] = useState<string | null>(null);
+  const [mockConnected, setMockConnected] = useState({ apple: true, bank: false, coursera: false, hungerbox: false });
+  const [mockSyncTimes, setMockSyncTimes] = useState<Record<string, string | null>>({});
+  const [apiLoading, setApiLoading] = useState(true);
+
+  const handleActivePanelChange = (panel: SidebarPanel) => {
+    setActivePanel(panel);
+    localStorage.setItem("syntra_active_ingestion_panel", panel);
+  };
+
   // Read ?panel= from URL so /assets-liabilities redirect lands correctly
   const searchParams = useSearchParams();
   useEffect(() => {
     const panel = searchParams?.get("panel") as SidebarPanel | null;
     if (panel && ["manual", "social", "assets", "uploads", "api"].includes(panel)) {
       setActivePanel(panel);
+      localStorage.setItem("syntra_active_ingestion_panel", panel);
+    } else {
+      const saved = localStorage.getItem("syntra_active_ingestion_panel") as SidebarPanel | null;
+      if (saved && ["manual", "social", "assets", "uploads", "api"].includes(saved)) {
+        setActivePanel(saved);
+      }
     }
   }, [searchParams]);
 
@@ -568,11 +758,41 @@ export default function IngestionPage() {
         if (!d.success) return;
         setLatest(d.latest);
         if (d.scores) setCurrentScores(d.scores);
+        window.dispatchEvent(new Event("syntra-refresh"));
       }).catch(() => {});
   };
 
   useEffect(() => {
     setMounted(true);
+
+    // Load mock integrations from localStorage
+    const saved = localStorage.getItem("syntra_mock_integrations");
+    if (saved) {
+      try {
+        setMockConnected(JSON.parse(saved));
+      } catch (e) {}
+    }
+    // Load mock sync times from localStorage
+    const savedSync = localStorage.getItem("syntra_mock_sync_times");
+    if (savedSync) {
+      try {
+        setMockSyncTimes(JSON.parse(savedSync));
+      } catch (e) {}
+    }
+
+    fetch("/api/profile")
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.user?.googleFit?.syncActive) {
+          setGoogleFitConnected(true);
+          if (data.user.googleFit.lastSyncedAt) {
+            setGoogleFitLastSync(fmtDate(data.user.googleFit.lastSyncedAt));
+          }
+        }
+        setApiLoading(false);
+      })
+      .catch(() => setApiLoading(false));
+
     fetch("/api/log/latest", { credentials: "include" })
       .then(r => r.json()).then(d => {
         if (!d.success) return;
@@ -683,12 +903,14 @@ export default function IngestionPage() {
   ];
   const prompt = PROMPTS[new Date().getDate() % PROMPTS.length];
 
+  const totalConnected = (googleFitConnected ? 1 : 0) + Object.values(mockConnected).filter(Boolean).length;
+
   const sidebarNav = [
     { key: "manual" as const, label: "Manual Entry", sub: "Log your day", icon: <Edit3 size={15} />, badge: "3 sections" },
     { key: "social" as const, label: "Social & Family", sub: "Relations & contacts", icon: <Heart size={15} /> },
     { key: "assets" as const, label: "Net Worth", sub: "Assets & liabilities", icon: <Wallet size={15} /> },
     { key: "uploads" as const, label: "Data Uploads", sub: "Import files", icon: <Upload size={15} /> },
-    { key: "api" as const, label: "API Sync", sub: "2 connected", icon: <Plug size={15} />, badge: "2" },
+    { key: "api" as const, label: "API Sync", sub: `${totalConnected} connected`, icon: <Plug size={15} />, badge: totalConnected },
   ];
 
   const handleSaveRelations = async () => {
@@ -761,6 +983,8 @@ export default function IngestionPage() {
         @keyframes fade-up    { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes lp-pulse   { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.65; transform:scale(1.35); } }
         @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes spin       { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .spin { animation: spin 1s linear infinite; }
 
         /* ── TOP NAVBAR ── */
         .top-nav {
@@ -1193,7 +1417,7 @@ export default function IngestionPage() {
           display: flex; flex-direction: column; align-items: center; gap: 7px;
         }
         .dropzone:hover { border-color: var(--brand); background: var(--brand-light); }
-        .upload-msg { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 11px; font-size: 0.79rem; font-weight: 600; }
+        .upload-msg { display: flex; align-items: flex-start; gap: 8px; padding: 10px 14px; border-radius: 11px; font-size: 0.79rem; font-weight: 600; white-space: pre-wrap; }
         .upload-msg.ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
         .upload-msg.err { background: #fef2f2; border: 1px solid #fca5a5; color: #dc2626; }
 
@@ -1267,7 +1491,7 @@ export default function IngestionPage() {
           {sidebarNav.map(item => (
             <NavItem key={item.key} icon={item.icon} label={item.label} sub={item.sub}
               active={activePanel === item.key} badge={item.badge}
-              onClick={() => { setActivePanel(item.key); setDrawerOpen(false); }} />
+              onClick={() => { handleActivePanelChange(item.key); setDrawerOpen(false); }} />
           ))}
         </div>
       </div>
@@ -1287,7 +1511,7 @@ export default function IngestionPage() {
             {sidebarNav.map(item => (
               <NavItem key={item.key} icon={item.icon} label={item.label} sub={item.sub}
                 active={activePanel === item.key} badge={item.badge}
-                onClick={() => setActivePanel(item.key)} />
+                onClick={() => handleActivePanelChange(item.key)} />
             ))}
           </div>
         </div>
@@ -1565,7 +1789,7 @@ export default function IngestionPage() {
                           {relations.householdMembers?.map((member, idx) => (
                             <span key={idx} className="pill on" style={{ background: "#3b82f6", display: "inline-flex", alignItems: "center", gap: 6, color: "#fff", borderColor: "transparent" }}>
                               🏠 {member.relationshipType}
-                              <button type="button" onClick={() => setRelations(p => ({ ...p, householdMembers: p.householdMembers.filter((_, i) => i !== idx) }))} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: "bold" }}>×</button>
+                              <button type="button" onClick={() => setRelations(p => ({ ...p, householdMembers: (p.householdMembers || []).filter((_, i) => i !== idx) }))} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, fontWeight: "bold" }}>×</button>
                             </span>
                           ))}
                         </div>
@@ -1594,7 +1818,7 @@ export default function IngestionPage() {
                               <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>
                                 👶 {dep.type === "child" ? "Child" : "Elderly Parent"} (Age: {dep.age})
                               </span>
-                              <button type="button" onClick={() => setRelations(p => ({ ...p, dependents: p.dependents.filter((_, i) => i !== idx) }))} style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer", fontSize: 14 }}>×</button>
+                              <button type="button" onClick={() => setRelations(p => ({ ...p, dependents: (p.dependents || []).filter((_, i) => i !== idx) }))} style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer", fontSize: 14 }}>×</button>
                             </div>
                           ))}
                         </div>
@@ -1825,7 +2049,18 @@ export default function IngestionPage() {
             {/* ── API SYNC ── */}
             {activePanel === "api" && (
               <div className="screen">
-                <ApiSyncPanel />
+                <ApiSyncPanel 
+                  onSuccess={refreshLatest}
+                  googleFitConnected={googleFitConnected}
+                  setGoogleFitConnected={setGoogleFitConnected}
+                  googleFitLastSync={googleFitLastSync}
+                  setGoogleFitLastSync={setGoogleFitLastSync}
+                  mockConnected={mockConnected}
+                  setMockConnected={setMockConnected}
+                  mockSyncTimes={mockSyncTimes}
+                  setMockSyncTimes={setMockSyncTimes}
+                  loading={apiLoading}
+                />
               </div>
             )}
 
@@ -1836,28 +2071,42 @@ export default function IngestionPage() {
       {/* Mobile Tab Bar */}
       <nav className="mob-tabbar">
         <div className="mob-tabbar-inner">
-          <button className={`mob-tab${activePanel === "manual" ? " active" : ""}`} onClick={() => setActivePanel("manual")}>
+          <button className={`mob-tab${activePanel === "manual" ? " active" : ""}`} onClick={() => handleActivePanelChange("manual")}>
             <div className="mob-tab-icon"><Edit3 size={19} /></div>
             <span className="mob-tab-label">Check-in</span>
           </button>
-          <button className={`mob-tab${activePanel === "social" ? " active" : ""}`} onClick={() => setActivePanel("social")}>
+          <button className={`mob-tab${activePanel === "social" ? " active" : ""}`} onClick={() => handleActivePanelChange("social")}>
             <div className="mob-tab-icon"><Heart size={19} /></div>
             <span className="mob-tab-label">Social</span>
           </button>
-          <button className={`mob-tab${activePanel === "assets" ? " active" : ""}`} onClick={() => setActivePanel("assets")}>
+          <button className={`mob-tab${activePanel === "assets" ? " active" : ""}`} onClick={() => handleActivePanelChange("assets")}>
             <div className="mob-tab-icon"><Wallet size={19} /></div>
             <span className="mob-tab-label">Net Worth</span>
           </button>
-          <button className={`mob-tab${activePanel === "uploads" ? " active" : ""}`} onClick={() => setActivePanel("uploads")}>
+          <button className={`mob-tab${activePanel === "uploads" ? " active" : ""}`} onClick={() => handleActivePanelChange("uploads")}>
             <div className="mob-tab-icon"><Upload size={19} /></div>
             <span className="mob-tab-label">Uploads</span>
           </button>
-          <button className={`mob-tab${activePanel === "api" ? " active" : ""}`} onClick={() => setActivePanel("api")}>
+          <button className={`mob-tab${activePanel === "api" ? " active" : ""}`} onClick={() => handleActivePanelChange("api")}>
             <div className="mob-tab-icon"><Plug size={19} /></div>
             <span className="mob-tab-label">API Sync</span>
           </button>
         </div>
       </nav>
     </div>
+  );
+}
+
+export default function IngestionPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#EDF0F7" }}>
+        <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: "#0047D4", fontFamily: '"DM Sans", sans-serif' }}>
+          Loading Ingestion Engine...
+        </div>
+      </div>
+    }>
+      <IngestionPage />
+    </Suspense>
   );
 }

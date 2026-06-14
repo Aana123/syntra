@@ -150,6 +150,8 @@ export async function POST(req: Request) {
       hoursStudied: Number(hoursStudied) || 3,
       learningProfile: learningProfile || "",
       archetype: archetype || "",
+      skills: "",
+      education: "",
     };
     user.goals = [startingGoal];
     user.markModified("profile");

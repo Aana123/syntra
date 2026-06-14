@@ -74,6 +74,37 @@ export interface aitwinReflectionResponse {
   confidence: number;              // integer 0–100, capped by confidenceScore.ts
   leadIndicator: string;           // 2-5 word label for the #1 success driver, e.g. "Sleep Consistency"
   primaryRisk: string;             // 2-5 word label for the top current risk, e.g. "Budget Overrun"
+  domainWidgets?: {
+    health: {
+      todaysMealPlan: Array<{
+        meal: string;       // "Breakfast", "Lunch", "Evening Snack", "Dinner"
+        items: string;      // specific foods tailored to constraints & nutrient gaps
+        prepTime: string;   // e.g. "10m"
+        calories: number;   // integer kcal per meal
+        fix: string;        // nutrient rationale, e.g. "Iron & Fibre boost"
+      }>;
+    };
+    finance: {
+      smartMoneyChecklist: Array<{
+        done: boolean;      // true = user is already doing this based on their data
+        title: string;      // e.g. "Build Emergency Fund"
+        sub: string;        // personalised explanation referencing their actual goals/spending
+      }>;
+    };
+    career: {
+      paretoSkills: Array<{
+        skill: string;
+        priority: "High" | "Medium" | "Low";
+        hoursRequired: string;  // e.g. "15h"
+        source: string;         // course platform / resource
+      }>;
+      studyBlocks: Array<{
+        day: string;   // e.g. "Mon–Fri"
+        time: string;  // e.g. "7:00 AM – 8:30 AM"
+        focus: string; // what to work on, personalised to their goal/blocker
+      }>;
+    };
+  };
 }
 
 // ── Simulator Types ──────────────────────────────────────────────

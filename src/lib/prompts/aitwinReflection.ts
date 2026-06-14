@@ -87,6 +87,48 @@ const aitwinReflectionSchema = z.object({
   primaryRisk: z.string().min(3).max(50),
 });
 
+const domainWidgetsSchema = z.object({
+  domainWidgets: z.object({
+    health: z.object({
+      todaysMealPlan: z.array(
+        z.object({
+          meal:     z.string().min(2).max(30),
+          items:    z.string().min(10).max(200),
+          prepTime: z.string().min(2).max(15),
+          calories: z.number().int().min(50).max(1500),
+          fix:      z.string().min(5).max(80),
+        })
+      ).min(3).max(5),
+    }),
+    finance: z.object({
+      smartMoneyChecklist: z.array(
+        z.object({
+          done:  z.boolean(),
+          title: z.string().min(5).max(80),
+          sub:   z.string().min(10).max(200),
+        })
+      ).min(2).max(5),
+    }),
+    career: z.object({
+      paretoSkills: z.array(
+        z.object({
+          skill:        z.string().min(2).max(60),
+          priority:     z.enum(["High", "Medium", "Low"]),
+          hoursRequired:z.string().min(1).max(20),
+          source:       z.string().min(2).max(80),
+        })
+      ).min(2).max(5),
+      studyBlocks: z.array(
+        z.object({
+          day:   z.string().min(3).max(40),
+          time:  z.string().min(5).max(40),
+          focus: z.string().min(5).max(120),
+        })
+      ).min(2).max(5),
+    }),
+  }),
+});
+
 // ================================================================
 // TRAJECTORY CALCULATOR
 // Converts raw averages into rate-of-change signals.
@@ -426,7 +468,11 @@ export function buildaitwinReflectionPrompt(
 
   const trajectory = calculateTrajectory(context, scores);
   const risks = detectRisks(context, trajectory);
-  const selectedExample = selectFewShotExample(context, scores);
+  // Only inject few-shot calibration example for new users (<15 logs).
+  // Power users have enough real data signals — skipping saves ~800 tokens per call.
+  const selectedExample = context.logCount < 15
+    ? selectFewShotExample(context, scores)
+    : "";
   const criticalSection = buildCriticalDomainSection(trajectory.criticalDomain, context, scores);
   const specificityRules = REFLECTION_SPECIFICITY_RULES(safeMission, safeConstraints);
 
@@ -541,8 +587,9 @@ ${criticalSection}
  
 ${specificityRules}
  
-━━━ CALIBRATION EXAMPLE (match this specificity) ━━━
+${selectedExample ? `━━━ CALIBRATION EXAMPLE (match this specificity) ━━━
 ${selectedExample}
+` : ""}
 
 ━━━ OUTPUT RULES ━━━
 1. twinPrediction: forward-looking (tomorrow or this week), must quantify the risk or opportunity based on specific goals.
@@ -554,7 +601,6 @@ ${selectedExample}
 7. confidence: integer, must not exceed ${confidence} — this ceiling is absolute.
 8. leadIndicator: 2-5 word label for the single behavior that will most determine success toward the personal mission (e.g. "Sleep Consistency", "DSA Study Hours", "Savings Rate"). Pick from the data — do NOT invent a generic label.
 9. primaryRisk: 2-5 word label for the top risk right now (e.g. "Sleep Debt", "Budget Overrun", "Study Dropout"). Derived from riskAlerts or behavior flags.
-
 ━━━ RETURN ONLY THIS JSON — NO TEXT OUTSIDE THE BRACES ━━━
 {
   "twinPrediction": "string",
@@ -590,7 +636,7 @@ async function callWithValidation(
 
   const rawResponse = await callGemini<unknown>(promptToExecute, {
     temperature: attempt === 1 ? 0.45 : 0.2, // Lower temp on retry
-    maxTokens: 4096,
+    maxTokens: 1500, // Capped at 1500 for Tier A response
   });
 
   const check = aitwinReflectionSchema.safeParse(rawResponse);
@@ -622,6 +668,218 @@ Return ONLY valid JSON with no text outside the braces.
 
   // Pass the newly constructed correctionPrompt back into the loop
   return callWithValidation(originalPrompt, confidence, attempt + 1, correctionPrompt);
+}
+
+// ================================================================
+// TIER B: DOMAIN BREAKDOWN WIDGET GENERATION
+// ================================================================
+
+export function buildDomainWidgetsPrompt(
+  context: TwinContext,
+  scores: DomainScores,
+  personalMission: string = "Achieve Personal Optimization",
+  healthConstraints: string = "none",
+  relations?: any,
+  supportNetwork?: any[],
+  familyOutflows?: any
+): string {
+  const safeMission = sanitizeForPrompt(personalMission, 200);
+  const safeConstraints = sanitizeForPrompt(healthConstraints, 150);
+
+  // Format relations and socials data
+  const hhMembers = relations?.householdMembers?.map((m: any) => m.relationshipType).join(", ") || "None";
+  const deps = relations?.dependents?.map((d: any) => `${d.type === 'child' ? 'Child' : 'Elderly Parent'} (Age: ${d.age})`).join(", ") || "None";
+  const supportNet = supportNetwork?.map((s: any) => `${s.name} (${s.relationshipType}) [Tag: ${s.tag}]`).join(", ") || "None";
+
+  // Format family outflows data
+  const childrenOut = familyOutflows?.children?.map((c: any) => 
+    `Child (Birth Year: ${c.yearOfBirth}, School Type: ${c.schoolType}, Annual School Fees: ₹${c.schoolFeesAnnual || 0}, Monthly Tuition: ₹${c.tuitionMonthly || 0}, Monthly Extracurriculars: ₹${c.extracurricularMonthly || 0}, Monthly Childcare: ₹${c.childcareMonthly || 0})`
+  ).join(" | ") || "None";
+
+  const cg = familyOutflows?.caregiving || {};
+  const caregivingOut = `Parent Healthcare Monthly: ₹${cg.parentHealthcareMonthly || 0}, Parent Insurance Annual Premium: ₹${cg.parentInsuranceAnnualPremium || 0}, Parent Insurance Cover: ₹${cg.parentInsuranceCoverAmount || 0}, Monthly Remittance: ₹${cg.monthlyRemittance || 0}, Household Help Monthly: ₹${cg.householdHelpMonthly || 0}`;
+
+  const trajectory = calculateTrajectory(context, scores);
+
+  const specificWealthGoals = (context as any).finance?.wealthGoals?.map((g: any) => {
+    const label = sanitizeForPrompt(g.goalLabel, 60);
+    if (typeof g.requiredMonthlySavings === "number") {
+      return `${label} (Requires Rs. ${g.requiredMonthlySavings.toLocaleString("en-IN")}/month, actual savings: Rs. ${g.actualMonthlySavings?.toLocaleString("en-IN")}/month, Deficit: ${g.deficitText})`;
+    }
+    return label;
+  }).join(", ") || "Dream Car / Home Downpayment";
+  const specificHealthGaps = (context as any).health?.historicalNutrientGaps ? JSON.stringify((context as any).health.historicalNutrientGaps) : "General nutrient gaps";
+
+  return `
+You are Syntra — an advanced, empathetic Digital Twin AI.
+This prompt is designed purely to generate your personalised domain breakdown widgets.
+ 
+YOUR VOICE AND CHARACTER:
+- You speak in second person: "You", "Your Twin" — never third person
+- You are specific, never vague — every claim cites an actual number from the data
+- You sound like a trusted advisor who has studied this person for weeks and genuinely cares
+- You are NOT a cheerleader ("Great job!") and NOT a doctor ("You may be experiencing")
+ 
+━━━ USER STATE BRIEFING ━━━
+ 
+PERSONAL MISSION: ${safeMission}
+HEALTH CONSTRAINTS: ${safeConstraints}
+ 
+RELATIONS & HOUSEHOLD:
+  Relationship Status: ${relations?.relationshipStatus || "Single"}
+  Household Members: ${hhMembers}
+  Dependents: ${deps}
+
+SUPPORT NETWORK:
+  Contacts: ${supportNet}
+
+FAMILY OUTFLOWS:
+  Children: ${childrenOut}
+  Caregiving: ${caregivingOut}
+ 
+DOMAIN SCORES:
+  Health:  ${scores.health}/100 | Trend: ${context.trends.health}
+  Finance: ${scores.finance}/100 | Trend: ${context.trends.finance}
+  Career:  ${scores.career}/100 | Trend: ${context.trends.productivity}
+ 
+Dominant strength: ${trajectory.dominantDomain.toUpperCase()}
+Most critical gap: ${trajectory.criticalDomain.toUpperCase()}
+ 
+ACTIVE SPECIFIC GOALS (Reference these explicitly):
+  Wealth Goals: ${specificWealthGoals}
+  Health Gaps: ${specificHealthGaps}
+ 
+WEEKLY AVERAGES:
+  Sleep:              ${context.weeklyAverages.sleep}h/night
+  Sleep velocity:     ${trajectory.sleepVelocity}
+  Workouts:           ${context.weeklyAverages.workout} sessions/week
+  Study hours:        ${trajectory.productivityMomentum}
+  Savings rate:       ${context.weeklyAverages.savingsRate}%
+  Spending vs budget: ${trajectory.financialPressure}
+  Mood score:         ${context.weeklyAverages.moodScore}/10
+  Stress level:       ${context.weeklyAverages.stressLevel}/10
+  Calorie adherence:  ${context.weeklyAverages.calorieAdherence}%
+ 
+BEHAVIOUR FLAGS (cross-domain correlations):
+  Stress drives overspending:  ${context.behaviorFlags.stressSpendingCorrelation ? "ACTIVE" : "Not detected"}
+  Poor sleep hurts career:     ${context.behaviorFlags.sleepCareerCorrelation ? "ACTIVE" : "Not detected"}
+  No workout drops mood:       ${context.behaviorFlags.workoutMoodCorrelation ? "ACTIVE" : "Not detected"}
+  Late-night spending:         ${context.behaviorFlags.lateNightSpending ? "ACTIVE" : "Not detected"}
+  Weekend habit dropoff:       ${context.behaviorFlags.weekendDropoff ? "ACTIVE" : "Not detected"}
+ 
+HYDRATION & NUTRITION:
+  Avg water intake:    ${context.weeklyAverages.waterIntake} glasses/day
+  Meal consistency:    ${context.weeklyAverages.mealConsistency}% of days with all 3 meals
+  Meal skip pattern:   ${context.qualitative.skippedMealPattern}
+  Meals & Foods Eaten (Recent Logs):
+${context.qualitative.recentMealsEaten && context.qualitative.recentMealsEaten.length > 0 ? context.qualitative.recentMealsEaten.map((m, i) => `    Day ${i + 1}: "${m}"`).join("\n") : "    No specific food logs submitted yet."}
+
+SPENDING INTELLIGENCE:
+  Top expenses:        ${context.qualitative.topExpenseNames.length > 0 ? context.qualitative.topExpenseNames.join(", ") : "No spending pattern data yet"}
+  Impulse spend rate:  ${context.qualitative.impulseSpendRate}% of logged days flagged as impulse
+
+CAREER CONTEXT:
+  Recent courses:      ${context.qualitative.recentCourseNames.length > 0 ? context.qualitative.recentCourseNames.join(", ") : "None logged"}
+  Goal focus (recent): ${context.qualitative.recentGoalFocus.length > 0 ? context.qualitative.recentGoalFocus.join(", ") : "None logged"}
+  Recent blockers:     ${context.qualitative.recentBlockers.length > 0 ? context.qualitative.recentBlockers.join(", ") : "None reported"}
+
+USER VOICE (recent daily notes):
+${context.qualitative.recentDailyNotes.length > 0 ? context.qualitative.recentDailyNotes.map((n, i) => `  Day ${i + 1}: "${n}"`).join("\n") : "  No daily notes submitted yet."}
+ 
+━━━ OUTPUT RULES ━━━
+1. domainWidgets.health.todaysMealPlan: Generate 4 meals (Breakfast, Lunch, Evening Snack, Dinner). MUST respect the user's HEALTH CONSTRAINTS (${safeConstraints}). Base items on the user's Recent Logs of Meals & Foods Eaten — if they eat South Indian food, suggest South Indian meals. Reference specific nutrient gaps. All calories must be realistic integers.
+2. domainWidgets.finance.smartMoneyChecklist: Generate 3-4 personalised financial habits. Set done=true ONLY if the user's data confirms they are doing it (e.g. savings rate > 20% → index fund habit is probably active). Each sub must reference the user's actual goals or spending patterns (e.g. their car/house downpayment, their current savings rate %). Do NOT use generic text.
+3. domainWidgets.career.paretoSkills: Generate 2-4 skills the user should prioritise based on their logged courses, goal focus, and career blockers. Use their actual course names where available. Each source must be a real, specific resource (a book, platform, or channel).
+4. domainWidgets.career.studyBlocks: Generate 2-4 study time blocks based on the user's current study hours pattern (${context?.weeklyAverages?.studyHours ?? 0}h/week). If they study mornings, schedule mornings. Each focus must name a specific skill or task from their career data.
+
+━━━ RETURN ONLY THIS JSON — NO TEXT OUTSIDE THE BRACES ━━━
+{
+  "domainWidgets": {
+    "health": {
+      "todaysMealPlan": [
+        { "meal": "Breakfast", "items": "<specific personalised foods>", "prepTime": "<Xm>", "calories": <integer>, "fix": "<nutrient reason>" },
+        { "meal": "Lunch",     "items": "<specific personalised foods>", "prepTime": "<Xm>", "calories": <integer>, "fix": "<nutrient reason>" },
+        { "meal": "Evening Snack", "items": "<specific personalised foods>", "prepTime": "<Xm>", "calories": <integer>, "fix": "<nutrient reason>" },
+        { "meal": "Dinner",   "items": "<specific personalised foods>", "prepTime": "<Xm>", "calories": <integer>, "fix": "<nutrient reason>" }
+      ]
+    },
+    "finance": {
+      "smartMoneyChecklist": [
+        { "done": <boolean>, "title": "<personalised habit title>", "sub": "<personalised explanation referencing actual goals>" }
+      ]
+    },
+    "career": {
+      "paretoSkills": [
+        { "skill": "<skill name>", "priority": "High|Medium|Low", "hoursRequired": "<Xh>", "source": "<specific resource>" }
+      ],
+      "studyBlocks": [
+        { "day": "<days>", "time": "<HH:MM AM - HH:MM AM>", "focus": "<specific personalised task>" }
+      ]
+    }
+  }
+}
+`.trim();
+}
+
+async function callWidgetsWithValidation(
+  originalPrompt: string,
+  attempt: number = 1,
+  currentPromptToSend: string = ""
+): Promise<any> {
+  const MAX_ATTEMPTS = 3;
+  const promptToExecute = attempt === 1 ? originalPrompt : currentPromptToSend;
+
+  const rawResponse = await callGemini<unknown>(promptToExecute, {
+    temperature: attempt === 1 ? 0.45 : 0.2,
+    maxTokens: 4000, // Capped at 4000 for Tier B response
+  });
+
+  const check = domainWidgetsSchema.safeParse(rawResponse);
+
+  if (check.success) {
+    return check.data;
+  }
+
+  const errors = check.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join("; ");
+  console.warn(`[Syntra Widgets AI] Zod validation failed (attempt ${attempt}/${MAX_ATTEMPTS}): ${errors}`);
+
+  if (attempt >= MAX_ATTEMPTS) {
+    throw new Error(`AI output failed Zod validation after ${MAX_ATTEMPTS} attempts. Last errors: ${errors}`);
+  }
+
+  const correctionPrompt = `
+${originalPrompt}
+
+━━━ SYSTEM CORRECTION OVERRIDE ━━━
+Your previous response failed strict validation with these specific errors:
+${errors}
+
+You MUST fix the fields listed above. Do not alter the intent of the data, just fix the structural errors.
+Return ONLY valid JSON with no text outside the braces.
+  `.trim();
+
+  return callWidgetsWithValidation(originalPrompt, attempt + 1, correctionPrompt);
+}
+
+export async function generateDomainWidgets(
+  context: TwinContext,
+  scores: DomainScores,
+  personalMission: string = "Achieve Personal Optimization",
+  healthConstraints: string = "none",
+  relations?: any,
+  supportNetwork?: any[],
+  familyOutflows?: any
+): Promise<any> {
+  const prompt = buildDomainWidgetsPrompt(
+    context,
+    scores,
+    personalMission,
+    healthConstraints,
+    relations,
+    supportNetwork,
+    familyOutflows
+  );
+  return callWidgetsWithValidation(prompt);
 }
 
 // ================================================================
