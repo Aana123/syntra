@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils/fetcher";
 import {
@@ -145,6 +146,64 @@ function StatPill({ label, value, accent }: { label: string; value: string; acce
     }}>
       <span style={{ fontSize: "0.67rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94A3B8" }}>{label}</span>
       <span style={{ fontSize: "1.1rem", fontWeight: 900, color: accent, letterSpacing: "-0.03em", fontFamily: '"DM Sans", sans-serif' }}>{value}</span>
+    </div>
+  );
+}
+
+const NAV_LINKS = [
+  { href: "/dashboard",          label: "Dashboard" },
+  { href: "/ingestion",          label: "Ingestion" },
+  { href: "/goals",              label: "Goals" },
+  { href: "/simulator",          label: "Simulator" },
+  { href: "/insights",           label: "Insights" },
+  { href: "/profile",            label: "Profile" },
+];
+
+function TopNav() {
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 10);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <div className={`top-nav${scrolled ? " top-nav-scrolled" : ""}`}>
+      <div className="top-nav-inner">
+        <Link href="/" className="top-nav-logo">syn<strong>tra</strong></Link>
+        <nav className="top-nav-links">
+          {NAV_LINKS.map(l => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className={`top-nav-link${l.href === "/insights" ? " top-nav-link-active" : ""}`}
+            >
+              {l.label}
+            </Link>
+          ))}
+        </nav>
+        <button
+          className="top-nav-hamburger"
+          onClick={() => setMenuOpen(v => !v)}
+          aria-label="Menu"
+        >
+          <span /><span /><span />
+        </button>
+      </div>
+      <div className={`top-nav-mobile-menu${menuOpen ? " open" : ""}`}>
+        {NAV_LINKS.map(l => (
+          <Link
+            key={l.href}
+            href={l.href}
+            className={`top-nav-mobile-link${l.href === "/insights" ? " active" : ""}`}
+            onClick={() => setMenuOpen(false)}
+          >
+            {l.label}
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
@@ -615,12 +674,8 @@ export default function InsightsPage() {
   return (
     <div className="ins-root">
       <style>{CSS}</style>
+      <TopNav />
       <PageShell activeSection={activeSection} onNav={goToSection} confidence={ai.confidence} isCalib={isCalib}>
-        {/* Back + refresh row */}
-        <button className="back-btn" onClick={() => router.push("/dashboard")}>
-          <ArrowLeft size={13}/> Return to Dashboard
-        </button>
-
         {/* Page heading */}
         <div className="page-heading-block">
           <div className="page-eyebrow">
@@ -739,11 +794,6 @@ function PageShell({ children, activeSection, onNav, confidence, isCalib }: {
             </div>
           </div>
         )}
-
-        {/* Back at bottom */}
-        <div className="sidebar-back">
-          <a href="/dashboard" className="sidebar-back-btn"><ArrowLeft size={12}/> Back to Dashboard</a>
-        </div>
       </div>
 
       {/* ── RIGHT CONTENT ── */}
@@ -778,6 +828,7 @@ const CSS = `
     --sh-lg:  0 8px 32px rgba(0,71,212,0.10), 0 2px 8px rgba(0,0,0,0.04);
     --sh-hov: 0 12px 36px rgba(0,71,212,0.12), 0 2px 8px rgba(0,0,0,0.05);
     --r-md: 12px; --r-lg: 16px; --r-xl: 20px; --r-2xl: 24px;
+    --nav-h: 70px;
   }
   body { background: var(--bg); font-family: "Inter", sans-serif; -webkit-font-smoothing: antialiased; color: var(--txt-1); }
 
@@ -793,15 +844,15 @@ const CSS = `
   /* ═══ SHELL LAYOUT ═══ */
   .ins-root { min-height: 100vh; background: var(--bg); }
   .shell {
-    display: flex; min-height: 100vh;
+    display: flex; min-height: calc(100vh - var(--nav-h)); padding-top: var(--nav-h);
   }
 
   /* ═══ SIDEBAR ═══ */
   .sidebar {
-    width: 288px; flex-shrink: 0; min-height: 100vh;
+    width: 288px; flex-shrink: 0; min-height: calc(100vh - var(--nav-h));
     background: linear-gradient(160deg, #0036BB 0%, #0052E8 45%, #2A18E8 100%);
     display: flex; flex-direction: column;
-    position: sticky; top: 0; height: 100vh; overflow: hidden;
+    position: sticky; top: var(--nav-h); height: calc(100vh - var(--nav-h)); overflow: hidden;
     box-shadow: 4px 0 24px rgba(0,36,187,0.18); z-index: 10;
   }
   .sidebar::before {
@@ -878,15 +929,108 @@ const CSS = `
   }
   .sidebar-conf-card:hover { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.07); }
 
-  /* back */
-  .sidebar-back { padding: 14px 16px; border-top: 1px solid rgba(255,255,255,0.1); position: relative; z-index: 2; }
-  .sidebar-back-btn {
-    display: inline-flex; align-items: center; gap: 7px;
-    font-size: 0.77rem; font-weight: 600; color: rgba(255,255,255,0.58);
-    cursor: pointer; background: none; border: none;
-    transition: color 0.18s; font-family: "Inter", sans-serif; text-decoration: none;
+  /* ═══ TOP NAVBAR ═══ */
+  .top-nav {
+    position: fixed;
+    top: 0; left: 0; width: 100%;
+    z-index: 500;
+    height: var(--nav-h);
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(228,233,244,0.6);
+    transition: background 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
   }
-  .sidebar-back-btn:hover { color: #fff; }
+  .top-nav.top-nav-scrolled {
+    background: #ffffff;
+    border-color: #e4e9f4;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+  }
+  .top-nav-inner {
+    max-width: 1600px;
+    margin: 0 auto;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+  }
+  .top-nav-logo {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.55rem;
+    font-weight: 300;
+    color: var(--brand);
+    text-decoration: none;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    transition: opacity 0.2s;
+  }
+  .top-nav-logo:hover { opacity: 0.78; }
+  .top-nav-logo strong { font-weight: 800; letter-spacing: 0.1em; }
+  .top-nav-links {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .top-nav-link {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: #555;
+    text-decoration: none;
+    padding: 7px 14px;
+    border-radius: 9999px;
+    transition: all 0.2s;
+    letter-spacing: 0.01em;
+  }
+  .top-nav-link:hover { background: #f0f4ff; color: var(--brand); }
+  .top-nav-link-active {
+    background: var(--brand) !important;
+    color: #fff !important;
+    font-weight: 600;
+  }
+  .top-nav-hamburger {
+    display: none;
+    flex-direction: column;
+    gap: 5px;
+    cursor: pointer;
+    padding: 8px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 10px;
+    background: #f5f5f5;
+    transition: all 0.2s;
+  }
+  .top-nav-hamburger:hover { border-color: var(--brand-mid); background: var(--brand-lt); }
+  .top-nav-hamburger span { display: block; width: 20px; height: 2px; background: #333; border-radius: 2px; }
+  .top-nav-mobile-menu {
+    display: none;
+    flex-direction: column;
+    gap: 5px;
+    position: absolute;
+    top: calc(var(--nav-h) + 4px);
+    right: 20px;
+    width: 210px;
+    padding: 12px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.97);
+    backdrop-filter: blur(20px);
+    border: 1px solid #e8ebf4;
+    box-shadow: 0 12px 40px rgba(0,68,220,0.12);
+    z-index: 600;
+  }
+  .top-nav-mobile-menu.open { display: flex; }
+  .top-nav-mobile-link {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: #333;
+    text-decoration: none;
+    padding: 10px 14px;
+    border-radius: 10px;
+    transition: all 0.16s;
+  }
+  .top-nav-mobile-link:hover { background: #f0f4ff; color: var(--brand); }
+  .top-nav-mobile-link.active { background: var(--brand-lt); color: var(--brand); font-weight: 700; }
 
   /* ═══ RIGHT CONTENT — THE FIX ═══
      Mirrors the Twin Profile .pf-right exactly:
@@ -909,16 +1053,6 @@ const CSS = `
     padding: 44px 52px 80px;
   }
 
-  /* ═══ BACK BTN ═══ */
-  .back-btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    font-size: 0.82rem; font-weight: 600; color: var(--txt-2);
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 9999px; padding: 8px 18px; cursor: pointer;
-    transition: all 0.2s; box-shadow: var(--sh-sm);
-    margin-bottom: 32px; text-decoration: none;
-  }
-  .back-btn:hover { color: var(--brand); border-color: var(--brand-mid); background: var(--brand-lt); transform: translateX(-2px); }
 
   /* ═══ PAGE HEADING ═══ */
   .page-heading-block { padding-bottom: 32px; border-bottom: 1px solid var(--border); margin-bottom: 32px; }
@@ -1106,6 +1240,11 @@ const CSS = `
     .right-content { border-left: none; display: block; }
     .right-inner { padding: 28px 24px 60px; }
     .mobile-tabs { display: flex; }
+    .top-nav-links { display: none; }
+    .top-nav-hamburger { display: flex; }
+    :root { --nav-h: 58px; }
+    .top-nav-inner { padding: 0 16px; }
+    .top-nav-logo { font-size: 1.3rem; }
   }
   @media (max-width: 520px) {
     .page-title { font-size: 1.65rem; }
