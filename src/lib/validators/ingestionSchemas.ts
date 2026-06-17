@@ -164,8 +164,8 @@ export const InsurancePolicySchema = z.object({
 // ==========================================
 
 export const CertificationSchema = z.object({
-  title: z.string(),
-  issuingOrganization: z.string(),
+  title: z.string().optional(),
+  issuingOrganization: z.string().optional(),
   issueDate: z.string().optional(),
   expirationDate: z.string().optional(),
   credentialId: z.string().optional(),

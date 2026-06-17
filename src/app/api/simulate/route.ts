@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
+import AssetLiability from "@/models/AssetLiability";
 import { runSimulation } from "@/lib/simulator";
 import { buildTwinContext } from "@/lib/aiContextBuilder";
 import { calculateConfidence } from "@/lib/confidenceScore";
@@ -51,6 +52,8 @@ export async function GET(req: Request) {
       userId: new mongoose.Types.ObjectId(session.user.id),
     }).sort({ date: -1 }).limit(21).lean();
 
+    const portfolio: any = await AssetLiability.findOne({ userId: user._id }).lean();
+
     const twinContext = buildTwinContext(recentLogs, {
       monthlyIncome: user.profile?.monthlyIncome,
       monthlyBudget: user.profile?.monthlyBudget,
@@ -63,6 +66,53 @@ export async function GET(req: Request) {
     const avgProductivity = productivityValues.length
       ? Math.round((productivityValues.reduce((a, b) => a + b, 0) / productivityValues.length) * 10) / 10
       : 7;
+
+    // 1. Credit Cards
+    const ccCards = portfolio?.liabilities?.shortTerm?.creditCards || [];
+    const totalCcOutstanding = ccCards.reduce((sum: number, c: any) => sum + (c.outstanding || 0), 0);
+    const avgCcApr = ccCards.length > 0
+      ? (ccCards.reduce((sum: number, c: any) => sum + (c.apr || 0), 0) / ccCards.length)
+      : 36;
+    const ccName = ccCards.length === 1 ? ccCards[0].cardName : (ccCards.length > 1 ? "Credit Cards" : "Credit Card");
+
+    // 2. Home Loan
+    const homeLoans = portfolio?.liabilities?.longTerm?.homeLoans || [];
+    const firstHomeLoan = homeLoans[0];
+    const mortgageOutstanding = firstHomeLoan?.outstanding || 4000000;
+    const mortgageRate = firstHomeLoan?.interestRate || 8.5;
+    const mortgageTenure = firstHomeLoan?.remainingTenureMonths || 240;
+    const mortgagePrepayment = Math.round(mortgageOutstanding * 0.05) || 200000;
+    const mortgageLender = firstHomeLoan?.lender || "home";
+
+    // 3. Dining Out redirection
+    const diningGoal = user.goals?.find((g: any) => {
+      const titleLower = g.title?.toLowerCase() || "";
+      return titleLower.includes("zomato") || titleLower.includes("dining") || titleLower.includes("food") || titleLower.includes("restaurant");
+    });
+    let diningRedirectionAmount = 5000;
+    if (user.profile?.monthlyBudget) {
+      diningRedirectionAmount = Math.max(2000, Math.min(15000, Math.round(user.profile.monthlyBudget * 0.1 / 1000) * 1000));
+    }
+    const diningGoalTitle = diningGoal ? diningGoal.title : "education SIP";
+
+    // 4. SIP delay goal
+    const financeGoal = user.goals?.find((g: any) => {
+      const titleLower = g.title?.toLowerCase() || "";
+      const isDining = titleLower.includes("zomato") || titleLower.includes("dining") || titleLower.includes("food") || titleLower.includes("restaurant");
+      return g.domain === "finance" && !isDining;
+    }) || user.goals?.find((g: any) => g.domain === "finance");
+
+    const wealthGoals = preComputeWealthGoals(
+      user.goals || [],
+      user.profile?.monthlyIncome || 50000,
+      user.profile?.monthlyBudget || 0,
+      twinContext.weeklyAverages.savingsRate || 20
+    );
+    const mainWealthGoal = financeGoal ? wealthGoals.find((wg: any) => wg.goalLabel === financeGoal.title) : wealthGoals[0];
+
+    const sipDelayAmount = mainWealthGoal?.requiredMonthlySavings || 10000;
+    const sipDelayTenure = Math.round((mainWealthGoal?.monthsRemaining || 180) / 12) || 15;
+    const sipGoalName = mainWealthGoal?.goalLabel || "education SIP";
 
     return NextResponse.json({
       success: true,
@@ -79,6 +129,25 @@ export async function GET(req: Request) {
         savings_rate: twinContext.weeklyAverages.savingsRate || 20,
         monthly_income: user.profile?.monthlyIncome || 50000,
         monthly_budget: user.profile?.monthlyBudget || 40000,
+
+        // Personalized baselines for presets
+        cc_balance: totalCcOutstanding || 48000,
+        cc_apr: avgCcApr,
+        cc_name: ccName,
+        has_credit_card: ccCards.length > 0,
+        mortgage_outstanding: mortgageOutstanding,
+        mortgage_rate: mortgageRate,
+        mortgage_tenure_months: mortgageTenure,
+        mortgage_prepayment: mortgagePrepayment,
+        mortgage_lender: mortgageLender,
+        has_home_loan: homeLoans.length > 0,
+        dining_redirection_amount: diningRedirectionAmount,
+        dining_goal_title: diningGoalTitle,
+        has_dining_goal: !!diningGoal,
+        sip_delay_amount: sipDelayAmount,
+        sip_delay_tenure: sipDelayTenure,
+        sip_goal_name: sipGoalName,
+        has_finance_goal: !!financeGoal,
       },
       goals: user.goals || [],
     }, { status: 200 });
@@ -137,7 +206,10 @@ export async function POST(req: Request) {
       const params = scenario.customParams || {};
       
       if (variable === "dining_redirect") {
-        const redirectionAmount = Number(params.redirectionAmount) || 5000;
+        const defaultRedirectionAmount = user.profile?.monthlyBudget 
+          ? Math.max(2000, Math.min(15000, Math.round(user.profile.monthlyBudget * 0.1 / 1000) * 1000))
+          : 5000;
+        const redirectionAmount = Number(params.redirectionAmount) || defaultRedirectionAmount;
         const cagr = Number(params.cagr) || 12;
         
         const fv5 = calculateSIPFutureValue(redirectionAmount, cagr, 5);
@@ -161,8 +233,15 @@ export async function POST(req: Request) {
         percentageChange = 0.25; 
         simulatedValue = 75;
       } else if (variable === "credit_card_clearance") {
-        const balance = Number(params.balance) || 48000;
-        const apr = Number(params.apr) || 36;
+        const portfolio: any = await AssetLiability.findOne({ userId: user._id }).lean();
+        const ccCards = portfolio?.liabilities?.shortTerm?.creditCards || [];
+        const totalCcOutstanding = ccCards.reduce((sum: number, c: any) => sum + (c.outstanding || 0), 0);
+        const avgCcApr = ccCards.length > 0
+          ? (ccCards.reduce((sum: number, c: any) => sum + (c.apr || 0), 0) / ccCards.length)
+          : 36;
+
+        const balance = Number(params.balance) || totalCcOutstanding || 48000;
+        const apr = Number(params.apr) || avgCcApr;
         const amortMonths = Number(params.amortMonths) || 12;
         
         const CCDetails = calculateCreditCardSavings(balance, apr, amortMonths);
@@ -184,9 +263,32 @@ export async function POST(req: Request) {
         percentageChange = 0.35;
         simulatedValue = 85;
       } else if (variable === "education_sip_delay") {
-        const sipAmount = Number(params.sipAmount) || 10000;
+        const recentLogs = await Log.find({
+          userId: new mongoose.Types.ObjectId(session.user.id),
+        }).sort({ date: -1 }).limit(21).lean();
+        const twinContext = buildTwinContext(recentLogs, {
+          monthlyIncome: user.profile?.monthlyIncome,
+          monthlyBudget: user.profile?.monthlyBudget,
+        });
+        const wealthGoals = preComputeWealthGoals(
+          user.goals || [],
+          user.profile?.monthlyIncome || 50000,
+          user.profile?.monthlyBudget || 0,
+          twinContext.weeklyAverages.savingsRate || 20
+        );
+        const financeGoal = user.goals?.find((g: any) => {
+          const titleLower = g.title?.toLowerCase() || "";
+          const isDining = titleLower.includes("zomato") || titleLower.includes("dining") || titleLower.includes("food") || titleLower.includes("restaurant");
+          return g.domain === "finance" && !isDining;
+        }) || user.goals?.find((g: any) => g.domain === "finance");
+        const mainWealthGoal = financeGoal ? wealthGoals.find((wg: any) => wg.goalLabel === financeGoal.title) : wealthGoals[0];
+        
+        const defaultSipAmount = mainWealthGoal?.requiredMonthlySavings || 10000;
+        const defaultTenure = Math.round((mainWealthGoal?.monthsRemaining || 180) / 12) || 15;
+
+        const sipAmount = Number(params.sipAmount) || defaultSipAmount;
         const delayYears = Number(params.delayYears) || 2;
-        const tenureYears = Number(params.tenureYears) || 15;
+        const tenureYears = Number(params.tenureYears) || defaultTenure;
         const cagr = Number(params.cagr) || 12;
         
         const delayDetails = calculateSIPDelayCost(sipAmount, delayYears, tenureYears, cagr);
@@ -212,10 +314,18 @@ export async function POST(req: Request) {
         percentageChange = -0.20;
         simulatedValue = 40;
       } else if (variable === "mortgage_prepayment") {
-        const outstanding = Number(params.outstanding) || 4000000;
-        const annualRate = Number(params.annualRate) || 8.5;
-        const remainingYears = Number(params.remainingYears) || 20;
-        const prepayment = Number(params.prepayment) || 200000;
+        const portfolio: any = await AssetLiability.findOne({ userId: user._id }).lean();
+        const homeLoans = portfolio?.liabilities?.longTerm?.homeLoans || [];
+        const firstHomeLoan = homeLoans[0];
+        const defaultOutstanding = firstHomeLoan?.outstanding || 4000000;
+        const defaultRate = firstHomeLoan?.interestRate || 8.5;
+        const defaultTenure = Math.round((firstHomeLoan?.remainingTenureMonths || 240) / 12) || 20;
+        const defaultPrepayment = Math.round(defaultOutstanding * 0.05) || 200000;
+
+        const outstanding = Number(params.outstanding) || defaultOutstanding;
+        const annualRate = Number(params.annualRate) || defaultRate;
+        const remainingYears = Number(params.remainingYears) || defaultTenure;
+        const prepayment = Number(params.prepayment) || defaultPrepayment;
         
         const prepayDetails = calculateMortgagePrepayment(outstanding, annualRate, remainingYears, prepayment);
         
@@ -263,7 +373,11 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: "Invalid scenario payload." }, { status: 400 });
         }
 
-        percentageChange = currentValue !== 0 ? (simulatedValue - currentValue) / currentValue : 0;
+        if (variable === "discretionary_spend") {
+          percentageChange = currentValue !== 0 ? (currentValue - simulatedValue) / currentValue : 0;
+        } else {
+          percentageChange = currentValue !== 0 ? (simulatedValue - currentValue) / currentValue : 0;
+        }
       }
     }
 

@@ -1,6 +1,9 @@
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
+import { calculateHealthScore, calculateEarnedXP } from "@/lib/scoring";
+import { recalculateStreak } from "@/lib/streak";
+import { generateAndStoreSnapshot } from "@/lib/snapshotService";
 
 // Helper to refresh Google Fit OAuth tokens
 async function refreshAccessToken(user: any): Promise<string> {
@@ -172,14 +175,25 @@ export async function syncGoogleFitData(userId: string) {
     }
   });
 
+  // Sum up all workouts to get finalWorkoutMinutes
+  const finalWorkouts = existingLog
+    ? [
+        ...(existingLog.domainData?.workouts || []),
+        ...(workouts || [])
+      ].filter((v, i, self) => self.findIndex(t => t.name === v.name) === i)
+    : workouts;
+
+  const finalWorkoutMinutes = finalWorkouts.reduce((sum: number, w: any) => sum + (Number(w.durationMinutes) || 0), 0);
+
   const googleFitPayload = {
     steps: steps > 0 ? steps : undefined,
     sleepHours: sleepHours > 0 ? sleepHours : undefined,
+    workoutMinutes: finalWorkoutMinutes > 0 ? finalWorkoutMinutes : undefined,
     avgHeartRate: avgHR > 0 ? Math.round(avgHR) : undefined,
     oxygenSaturation: avgSpO2 > 0 ? parseFloat((avgSpO2 * 100).toFixed(1)) : undefined,
     hrv: Math.round(hrv),
     isHrvEstimated,
-    workouts: workouts.length > 0 ? workouts : undefined,
+    workouts: finalWorkouts.length > 0 ? finalWorkouts : undefined,
     source: "google-fit"
   };
 
@@ -192,12 +206,7 @@ export async function syncGoogleFitData(userId: string) {
     // MERGE logic: Combine existing log data with new Google Fit telemetry
     existingLog.domainData = {
       ...existingLog.domainData,
-      ...cleanFitPayload,
-      // If workouts already exist, merge arrays instead of discarding
-      workouts: [
-        ...(existingLog.domainData?.workouts || []),
-        ...(cleanFitPayload.workouts || [])
-      ].filter((v, i, self) => self.findIndex(t => t.name === v.name) === i) // Deduplicate workouts by name
+      ...cleanFitPayload
     };
     await existingLog.save();
   } else {
@@ -206,13 +215,38 @@ export async function syncGoogleFitData(userId: string) {
       userId: user._id,
       date: startOfDay,
       domain: "health",
-      domainData: cleanFitPayload
+      domainData: {
+        workoutMinutes: 0,
+        ...cleanFitPayload
+      }
     });
   }
+
+  // Recalculate health score for user using final log data
+  const finalLogData = existingLog ? existingLog.domainData : cleanFitPayload;
+  const logSleepHours = Number(finalLogData.sleepHours) || 0;
+  const logWorkoutMinutes = Number(finalLogData.workoutMinutes) || 0;
+  const logStressLevel = Number(finalLogData.stressLevel) || 4; // default to 4 if none logged
+  const logWaterGlasses = typeof finalLogData.waterGlasses !== "undefined" ? Number(finalLogData.waterGlasses) : undefined;
+
+  const newScore = calculateHealthScore(logSleepHours, logWorkoutMinutes, logStressLevel, logWaterGlasses);
+  const smoothingFactor = 0.25;
+  user.scores.health = Math.round((user.scores.health * (1 - smoothingFactor)) + (newScore * smoothingFactor));
+
+  // Update gamification points
+  user.gamification.totalPoints += calculateEarnedXP(user.scores.health);
+
+  // Recalculate logging streak
+  await recalculateStreak(user);
 
   // Update sync timestamp
   user.googleFit.lastSyncedAt = new Date();
   await user.save();
+
+  // Pre-generate AI twin snapshot in the background with force = true
+  generateAndStoreSnapshot(user._id.toString(), user, undefined, true).catch(err => {
+    console.error("[CRITICAL] Background Google Fit Sync Snapshot Failed:", err);
+  });
 
   return {
     success: true,

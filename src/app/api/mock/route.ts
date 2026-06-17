@@ -129,7 +129,10 @@ export async function POST(req: Request) {
 
       const newScore = calculateFinanceScore(
         logEntry.domainData.amountSaved,
-        logEntry.domainData.discretionarySpent
+        logEntry.domainData.discretionarySpent,
+        undefined,
+        user.profile?.monthlyIncome,
+        user.profile?.monthlyBudget
       );
       user.scores.finance = Math.round((user.scores.finance * (1 - smoothingFactor)) + (newScore * smoothingFactor));
       message = "Synced successfully with banking API. Daily savings velocity recalculated.";

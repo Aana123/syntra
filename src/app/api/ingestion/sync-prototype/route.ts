@@ -11,6 +11,7 @@ import {
   calculateEarnedXP
 } from "@/lib/scoring";
 import { generateAndStoreSnapshot } from "@/lib/snapshotService";
+import { recalculateStreak } from "@/lib/streak";
 import { sampleAppleHealthData } from "@/lib/prototypeConnectors/sampleAppleHealth";
 import { sampleBankingTemplate } from "@/lib/prototypeConnectors/sampleBanking";
 import { sampleCourseraCourses } from "@/lib/prototypeConnectors/sampleCoursera";
@@ -217,7 +218,7 @@ export async function POST(req: Request) {
       console.log(`[Prototype Connector] Database Updated`);
 
       // Recalculate Finance Score
-      const newScore = calculateFinanceScore(amountSaved, discretionarySpent, false);
+      const newScore = calculateFinanceScore(amountSaved, discretionarySpent, false, user.profile?.monthlyIncome, user.profile?.monthlyBudget);
       user.scores.finance = Math.round((user.scores.finance * (1 - smoothingFactor)) + (newScore * smoothingFactor));
       recalculatedScoreValue = user.scores.finance;
       console.log(`[Prototype Connector] Scores Recalculated`);
@@ -337,36 +338,15 @@ export async function POST(req: Request) {
     // 4. GAMIFICATION PROCESSING
     user.gamification.totalPoints += calculateEarnedXP(recalculatedScoreValue);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const lastLog = user.gamification.lastLogDate
-      ? new Date(user.gamification.lastLogDate)
-      : null;
-
-    if (lastLog) lastLog.setHours(0, 0, 0, 0);
-
-    const todayStr = today.toDateString();
-    const lastLogStr = lastLog?.toDateString();
-
-    if (lastLogStr !== todayStr) {
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-
-      user.gamification.currentStreak =
-        lastLogStr === yesterday.toDateString()
-          ? user.gamification.currentStreak + 1
-          : 1;
-
-      user.gamification.lastLogDate = new Date();
-    }
+    // Recalculate logging streak
+    await recalculateStreak(user);
 
     // Save user document
     await user.save();
 
-    // 5. ASYNCHRONOUS AI SNAPSHOT PRE-GENERATION
+    // 5. ASYNCHRONOUS AI SNAPSHOT PRE-GENERATION (forced regeneration)
     waitUntil(
-      generateAndStoreSnapshot(user._id.toString(), user).catch(err => {
+      generateAndStoreSnapshot(user._id.toString(), user, undefined, true).catch(err => {
         console.error("[CRITICAL] Background Prototype Snapshot Failed:", err);
       })
     );

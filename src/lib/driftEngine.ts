@@ -145,8 +145,11 @@ export function analyzeBehavioralDrift(
     : dailyBudgetLimit;
 
   const actualIncome = user.profile?.monthlyIncome || 50000;
-  const totalSaved = amountSavedList.reduce((a, b) => a + b, 0);
-  const currentSavingsRate = actualIncome > 0 ? Math.round((totalSaved / actualIncome) * 100) : 0;
+  const dailyIncome = actualIncome / 30;
+  const avgDailySavings = amountSavedList.length > 0 
+    ? amountSavedList.reduce((a, b) => a + b, 0) / amountSavedList.length 
+    : 0;
+  const currentSavingsRate = dailyIncome > 0 ? Math.round((avgDailySavings / dailyIncome) * 100) : 0;
   const targetSavingsRate = user.profile?.targetSavingsRate || 20;
 
   const spendingDriftPct = calculateTargetDrift(avgDailySpend, dailyBudgetLimit, true); // Inverse: higher spending is negative

@@ -57,6 +57,7 @@ type AIAnalysis = {
   riskLevel: RiskLevel;
   recommendedPath: string;
   confidence: number;
+  suggestedActions?: string[];
 };
 type SimulationResponse = {
   success: boolean;
@@ -319,6 +320,27 @@ function SimulatorPage() {
           setFocusRating(finalFocus);
           setSavingsRate(finalSavings);
 
+          // Personalized baseline settings for custom finance variables
+          const initialDining = data.baselines.dining_redirection_amount || 5000;
+          const initialCcBalance = data.baselines.cc_balance || 48000;
+          const initialCcApr = data.baselines.cc_apr || 36;
+          const initialSipDelayAmount = data.baselines.sip_delay_amount || 10000;
+          const initialSipDelayTenure = data.baselines.sip_delay_tenure || 15;
+          const initialMortgageOutstanding = data.baselines.mortgage_outstanding || 4000000;
+          const initialMortgageRate = data.baselines.mortgage_rate || 8.5;
+          const initialMortgageTenure = Math.round((data.baselines.mortgage_tenure_months || 240) / 12) || 20;
+          const initialMortgagePrepayment = data.baselines.mortgage_prepayment || 200000;
+
+          setDiningRedirectionAmount(initialDining);
+          setCcBalance(initialCcBalance);
+          setCcApr(initialCcApr);
+          setSipDelayAmount(initialSipDelayAmount);
+          setSipDelayTenure(initialSipDelayTenure);
+          setMortgageOutstanding(initialMortgageOutstanding);
+          setMortgageRate(initialMortgageRate);
+          setMortgageTenure(initialMortgageTenure);
+          setMortgagePrepayment(initialMortgagePrepayment);
+
           if (paramDomain) {
             setTimeout(() => {
               runSimulation({
@@ -351,7 +373,11 @@ function SimulatorPage() {
       cur = activeVar === "study_hours" ? (baselines?.study_hours || 4) : (baselines?.focus_rating || 7);
       sim = activeVar === "study_hours" ? studyHours : focusRating;
     }
-    return cur !== 0 ? Math.round(((sim - cur) / cur) * 100) : 0;
+    if (cur === 0) return 0;
+    if (activeVar === "discretionary_spend") {
+      return Math.round(((cur - sim) / cur) * 100);
+    }
+    return Math.round(((sim - cur) / cur) * 100);
   }, [domain, activeVar, baselines, sleepHours, workoutFreq, savingsRate, spendStyle, studyHours, focusRating]);
 
   const impactHUD = useMemo(() => {
@@ -365,6 +391,58 @@ function SimulatorPage() {
     else if (abs >= 5)  impactLabel = isBenefit ? "Slight Positive"   : "Slight Negative";
     return { goalLabel, impactLabel, isBenefit };
   }, [pctChange, result, userGoals, domain]);
+
+  const presets = useMemo(() => {
+    const sleepBaseline = baselines?.sleep_hours || 7.5;
+    const workoutBaseline = baselines?.workout_frequency || 3;
+    const studyBaseline = baselines?.study_hours || 4;
+    const focusBaseline = baselines?.focus_rating || 7;
+    const savingsBaseline = baselines?.savings_rate || 20;
+
+    // Career preset dynamic definition (study less if baseline study hours is high to focus on balance; study more otherwise)
+    const isHighStudy = studyBaseline > 4;
+    const careerStudyHours = isHighStudy ? Math.max(1, studyBaseline - 2) : Math.min(12, studyBaseline + 2);
+    const careerFocusRating = Math.min(10, focusBaseline + 1);
+    const careerLabel = isHighStudy ? "What if I study less?" : "What if I study more?";
+    const careerSub = isHighStudy
+      ? `Reduce study hours from ${studyBaseline}h to ${careerStudyHours}h per day to focus on recovery & balance.`
+      : `Increase study hours from ${studyBaseline}h to ${careerStudyHours}h per day to accelerate skill development.`;
+    
+    // Health preset definition
+    const healthWorkoutFreq = Math.min(7, workoutBaseline + 2);
+    const healthLabel = "What if I work out more?";
+    const healthSub = workoutBaseline >= 7
+      ? "Maintain your maximum physical workout frequency of 7x/week."
+      : `Increase workout frequency from ${workoutBaseline}x to ${healthWorkoutFreq}x per week to build consistency.`;
+    
+    const financeSavingsRate = Math.min(100, savingsBaseline + 15);
+    
+    const financePreset = {
+      d: "finance" as Domain,
+      label: "What if I save a higher share of my income?",
+      sub: `Switch spending to Very Careful and bump savings rate from ${savingsBaseline}% to ${financeSavingsRate}% of monthly income.`,
+      var: "discretionary_spend",
+      trigger: () => { setSpendStyle(1); setSavingsRate(financeSavingsRate); }
+    };
+
+    return [
+      {
+        d: "career" as Domain,
+        label: careerLabel,
+        sub: careerSub,
+        var: "study_hours",
+        trigger: () => { setStudyHours(careerStudyHours); setFocusRating(careerFocusRating); }
+      },
+      {
+        d: "health" as Domain,
+        label: healthLabel,
+        sub: healthSub,
+        var: "workout_frequency",
+        trigger: () => setWorkoutFreq(healthWorkoutFreq)
+      },
+      financePreset
+    ];
+  }, [baselines]);
 
   const handleDomainChange = (d: Domain) => {
     setDomain(d);
@@ -443,6 +521,9 @@ function SimulatorPage() {
   };
 
   const checklist = useMemo(() => {
+    if (result?.aiAnalysis?.suggestedActions && result.aiAnalysis.suggestedActions.length > 0) {
+      return result.aiAnalysis.suggestedActions;
+    }
     if (!result?.aiAnalysis?.recommendedPath) return [];
     const rec = result.aiAnalysis.recommendedPath.toLowerCase();
     const items: string[] = [];
@@ -968,15 +1049,7 @@ function SimulatorPage() {
                 <div className="sec-label-rule"/>
               </div>
               <div className="preset-list">
-                {[
-                  { d: "career" as Domain, label: "Focus on Career Growth",  sub: "Increase daily study time and focus",       var: "study_hours",         trigger: () => { setStudyHours(8); setFocusRating(9); } },
-                  { d: "health" as Domain, label: "Work Out More Often",      sub: "Add two extra workouts per week",           var: "workout_frequency",   trigger: () => setWorkoutFreq(Math.min(7, (baselines?.workout_frequency||3)+2)) },
-                  { d: "finance" as Domain,label: "Cut Spending, Save More",  sub: "Switch to a more careful spending style",  var: "discretionary_spend", trigger: () => { setSpendStyle(1); setSavingsRate(Math.min(100,(baselines?.savings_rate||20)+15)); } },
-                  { d: "finance" as Domain,label: "Redirection: Dining to SIP",sub: "Move ₹5,000/mo to education SIP at 12% CAGR",var: "dining_redirect",   trigger: () => { setDiningRedirectionAmount(5000); setDiningCagr(12); } },
-                  { d: "finance" as Domain,label: "Debt Prepayment (Credit Card)",sub: "Prepay ₹48k balance immediately to save 36% APR",var: "credit_card_clearance",trigger: () => { setCcBalance(48000); setCcApr(36); setCcAmortMonths(12); } },
-                  { d: "finance" as Domain,label: "SIP Compounding Cost of Delay",sub: "Start education SIP today vs 2 years delay cost",var: "education_sip_delay",trigger: () => { setSipDelayAmount(10000); setSipDelayYears(2); setSipDelayTenure(15); setSipDelayCagr(12); } },
-                  { d: "finance" as Domain,label: "Home Loan Prepayment (₹2L)",sub: "Prepay ₹2L on ₹40L home loan to cut tenure",var: "mortgage_prepayment",trigger: () => { setMortgageOutstanding(4000000); setMortgageRate(8.5); setMortgageTenure(20); setMortgagePrepayment(200000); } },
-                ].map(item => {
+                {presets.map(item => {
                   const ddc = DOMAIN_COPY[item.d];
                   const isActive = domain === item.d && activeVar === item.var;
                   return (

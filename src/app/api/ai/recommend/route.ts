@@ -87,12 +87,18 @@ export async function GET(req: Request) {
     let isSnapshotStale = !hasValidSnapshot;
     if (hasValidSnapshot && user.aiSnapshot?.lastGeneratedAt) {
       const snapshotTime = new Date(user.aiSnapshot.lastGeneratedAt).getTime();
-      // Invalidate if any log was created/dated after the snapshot
-      isSnapshotStale = recentLogs.some((log) => {
+      
+      // 1. Invalidate if any log was created/dated after the snapshot
+      const logStale = recentLogs.some((log) => {
         const logTime = log.date ? new Date(log.date).getTime() : 0;
         const createdTime = (log as any).createdAt ? new Date((log as any).createdAt).getTime() : 0;
         return logTime > snapshotTime || createdTime > snapshotTime;
       });
+
+      // 2. Invalidate if the user profile/goals have been modified since snapshot generation
+      const profileStale = user.updatedAt && (new Date(user.updatedAt).getTime() - snapshotTime > 10000);
+
+      isSnapshotStale = logStale || !!profileStale;
     }
 
     // Deterministic finance data (computed from DB, not AI) — always sent regardless of cache state

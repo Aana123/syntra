@@ -25,7 +25,8 @@ const _inFlight = new Set<string>();
 export async function generateAndStoreSnapshot(
   userId: string | mongoose.Types.ObjectId,
   preFetchedUser?: any,
-  preFetchedLogs?: any[]
+  preFetchedLogs?: any[],
+  force = false
 ): Promise<void> {
   const userKey = userId.toString();
 
@@ -44,7 +45,7 @@ export async function generateAndStoreSnapshot(
       console.warn(`[Snapshot Service] User not found for ID: ${userId}`);
       return;
     }
-    if (user.aiSnapshot?.lastGeneratedAt && (Date.now() - new Date(user.aiSnapshot.lastGeneratedAt).getTime() < 30 * 1000)) {
+    if (!force && user.aiSnapshot?.lastGeneratedAt && (Date.now() - new Date(user.aiSnapshot.lastGeneratedAt).getTime() < 30 * 1000)) {
       console.log(`[Snapshot Service] Reflection generated within last 30 seconds for user ${userKey} — skipping duplicate.`);
       return;
     }

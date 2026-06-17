@@ -27,6 +27,7 @@ const SimulatorResponseSchema = z.object({
   riskLevel: z.enum(["low", "medium", "high", "critical"]),
   recommendedPath: z.string().min(10),
   confidence: z.number().int().min(0).max(100),
+  suggestedActions: z.array(z.string()).min(1),
 });
 
 // ── Domain trade-off knowledge base ─────────────────────────────
@@ -84,7 +85,12 @@ OUTPUT:
   ],
   "riskLevel": "medium",
   "recommendedPath": "Set a hard cap of 2.6h/day study. To prevent the Rs. 1,500 food delivery tax, meal-prep on Sunday so your Thar down payment stays on track.",
-  "confidence": 77
+  "confidence": 77,
+  "suggestedActions": [
+    "Set a hard cap of 2.6h/day study.",
+    "Meal-prep on Sunday to avoid Zomato charges.",
+    "Log study sessions daily in Syntra."
+  ]
 }
 `.trim();
 
@@ -168,7 +174,8 @@ ${SIMULATOR_EXAMPLE}
   ],
   "riskLevel": "low|medium|high|critical",
   "recommendedPath": "string — the smart way to execute this change with risk mitigation referencing specific goals",
-  "confidence": <integer max ${confidence}>
+  "confidence": <integer max ${confidence}>,
+  "suggestedActions": ["string — 2 to 3 personalized, highly actionable next steps to execute this change"]
 }
 `.trim();
 }
@@ -206,5 +213,9 @@ export async function generateSimulatorInsight(
     riskLevel: Math.abs(scenario.percentChange) > 35 ? "high" : "medium",
     recommendedPath: "Monitor all three domains as changes take effect.",
     confidence: 0,
+    suggestedActions: [
+      "Check in with your progress weekly using this simulator.",
+      "Monitor all three domains as changes take effect."
+    ],
   };
 }

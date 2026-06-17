@@ -126,6 +126,7 @@ export interface SimulatorResponse {
   riskLevel: "low" | "medium" | "high" | "critical";
   recommendedPath: string;
   confidence: number;
+  suggestedActions?: string[];
 }
 
 export interface TradeOff {

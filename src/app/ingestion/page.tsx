@@ -53,22 +53,49 @@ const NAV_LINKS = [
 function previewHealthScore(h: HealthData) {
   let s = 0;
   if (h.sleepHours >= 7 && h.sleepHours <= 9) s += 40;
-  else if (h.sleepHours >= 6) s += 20; else s += 5;
+  else if (h.sleepHours >= 6 || h.sleepHours === 10) s += 20;
+  else s += 5;
+
   if (h.workoutMinutes >= 60) s += 40;
   else if (h.workoutMinutes >= 30) s += 25;
   else if (h.workoutMinutes > 0) s += 10;
+
   s += Math.max(0, 20 - h.stressLevel * 2);
-  if (h.waterGlasses >= 8) s += 5; else if (h.waterGlasses <= 2) s -= 3;
+
+  if (h.waterGlasses >= 8) s += 5;
+  else if (h.waterGlasses <= 2) s -= 3;
+
   return Math.max(0, Math.min(100, s));
 }
-function previewFinanceScore(f: FinanceData) {
-  let s = 50;
+function previewFinanceScore(f: FinanceData, profile: any) {
+  let score = 50;
   const saved = Number(f.amountSaved) || 0;
   const spent = Number(f.discretionarySpent) || 0;
-  if (saved >= 100) s += 30; else if (saved > 0) s += 15;
-  if (spent === 0) s += 20; else if (spent < 50) s += 10; else if (spent > 100) s -= 20;
-  if (f.impulseSpend) s -= 5;
-  return Math.max(0, Math.min(100, s));
+
+  const monthlyIncome = profile?.monthlyIncome || 50000;
+  const monthlyBudget = profile?.monthlyBudget || 15000;
+
+  const dailyIncome = monthlyIncome / 30;
+  const dailyBudget = monthlyBudget / 30;
+
+  const savingsRate = dailyIncome > 0 ? (saved / dailyIncome) : 0;
+  if (savingsRate >= 0.30) score += 30;
+  else if (savingsRate >= 0.20) score += 20;
+  else if (savingsRate >= 0.10) score += 15;
+  else if (saved > 0) score += 5;
+
+  if (spent === 0) {
+    score += 20;
+  } else if (dailyBudget > 0 && spent < 0.10 * dailyBudget) {
+    score += 10;
+  } else if (dailyBudget > 0 && spent > 1.50 * dailyBudget) {
+    score -= 30;
+  } else if (dailyBudget > 0 && spent > 1.00 * dailyBudget) {
+    score -= 20;
+  }
+
+  if (f.impulseSpend) score -= 5;
+  return Math.max(0, Math.min(100, score));
 }
 function previewCareerScore(c: CareerData) {
   let s = 0;
@@ -592,7 +619,7 @@ function UploadsPanel({ onSuccess }: { onSuccess: () => void }) {
 
 
   const uploadTypes = [
-    { key: "pdf", label: "PDF Upload", sub: "Reports, salary slips, receipts", icon: "📄", color: "#dc2626", bg: "#fef2f2" },
+    { key: "pdf", label: "PDF / Image Upload", sub: "Reports, salary slips, receipts, images", icon: "📄", color: "#dc2626", bg: "#fef2f2" },
     { key: "csv", label: "CSV Upload", sub: "Exported spreadsheets", icon: "📊", color: "#16a34a", bg: "#f0fdf4" },
     { key: "excel", label: "Excel Upload", sub: "Health logs, expense trackers", icon: "📋", color: "var(--brand)", bg: "var(--brand-light)" },
   ];
@@ -643,7 +670,7 @@ function UploadsPanel({ onSuccess }: { onSuccess: () => void }) {
             </div>
 
             <div className="dropzone" onClick={() => document.getElementById("file-inp-up")?.click()}>
-              <input id="file-inp-up" type="file" accept={current.key === "pdf" ? ".pdf" : current.key === "csv" ? ".csv" : ".xlsx,.xls"} style={{ display:"none" }}
+              <input id="file-inp-up" type="file" accept={current.key === "pdf" ? ".pdf,.png,.jpg,.jpeg,.webp" : current.key === "csv" ? ".csv" : ".xlsx,.xls"} style={{ display:"none" }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) setUploadFile(f); }} />
               <Upload size={24} style={{ color:"var(--brand)" }} />
               <div style={{ fontSize:"0.84rem", color:"var(--text-secondary)", fontWeight:500, textAlign:"center" }}>
@@ -651,7 +678,7 @@ function UploadsPanel({ onSuccess }: { onSuccess: () => void }) {
                   ? <strong style={{ color:"var(--text-primary)" }}>{uploadFile.name} ({(uploadFile.size / 1024).toFixed(1)} KB)</strong>
                   : <><span style={{ color:"var(--brand)", fontWeight:700 }}>Choose a file</span> or drag it here</>}
               </div>
-              <div style={{ fontSize:"0.7rem", color:"var(--text-muted)" }}>Supports {current.key === "pdf" ? ".pdf" : current.key === "csv" ? ".csv" : ".xlsx, .xls"}</div>
+              <div style={{ fontSize:"0.7rem", color:"var(--text-muted)" }}>Supports {current.key === "pdf" ? ".pdf, .png, .jpg, .jpeg, .webp" : current.key === "csv" ? ".csv" : ".xlsx, .xls"}</div>
             </div>
 
             {uploadMsg && (
@@ -684,6 +711,7 @@ function IngestionPage() {
   const [dailyNote, setDailyNote] = useState("");
   const [activePanel, setActivePanel] = useState<SidebarPanel>("manual");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
 
   const [googleFitConnected, setGoogleFitConnected] = useState(false);
   const [googleFitLastSync, setGoogleFitLastSync] = useState<string | null>(null);
@@ -745,7 +773,7 @@ function IngestionPage() {
   const [supportTag, setSupportTag] = useState<"venting" | "advice" | "distraction" | "motivation">("venting");
 
   const pH = useMemo(() => previewHealthScore(health), [health]);
-  const pF = useMemo(() => previewFinanceScore(finance), [finance]);
+  const pF = useMemo(() => previewFinanceScore(finance, profile), [finance, profile]);
   const pC = useMemo(() => previewCareerScore(career), [career]);
 
   const projectedH = useMemo(() => Math.round(currentScores.health * 0.75 + pH * 0.25), [currentScores.health, pH]);
@@ -753,7 +781,7 @@ function IngestionPage() {
   const projectedC = useMemo(() => Math.round(currentScores.career * 0.75 + pC * 0.25), [currentScores.career, pC]);
 
   const refreshLatest = () => {
-    fetch("/api/log/latest", { credentials: "include" })
+    fetch("/api/log/latest", { cache: "no-store", credentials: "include" })
       .then(r => r.json()).then(d => {
         if (!d.success) return;
         setLatest(d.latest);
@@ -780,20 +808,23 @@ function IngestionPage() {
       } catch (e) {}
     }
 
-    fetch("/api/profile")
+    fetch("/api/profile", { cache: "no-store" })
       .then(r => r.json())
       .then(data => {
-        if (data.success && data.user?.googleFit?.syncActive) {
-          setGoogleFitConnected(true);
-          if (data.user.googleFit.lastSyncedAt) {
-            setGoogleFitLastSync(fmtDate(data.user.googleFit.lastSyncedAt));
+        if (data.success) {
+          setProfile(data.user.profile);
+          if (data.user?.googleFit?.syncActive) {
+            setGoogleFitConnected(true);
+            if (data.user.googleFit.lastSyncedAt) {
+              setGoogleFitLastSync(fmtDate(data.user.googleFit.lastSyncedAt));
+            }
           }
         }
         setApiLoading(false);
       })
       .catch(() => setApiLoading(false));
 
-    fetch("/api/log/latest", { credentials: "include" })
+    fetch("/api/log/latest", { cache: "no-store", credentials: "include" })
       .then(r => r.json()).then(d => {
         if (!d.success) return;
         setLatest(d.latest);
@@ -847,7 +878,7 @@ function IngestionPage() {
         }
       }).catch(() => {});
 
-    fetch("/api/profile/family", { credentials: "include" })
+    fetch("/api/profile/family", { cache: "no-store", credentials: "include" })
       .then(r => r.json()).then(d => {
         if (!d.success) return;
         if (d.relations) setRelations(d.relations);

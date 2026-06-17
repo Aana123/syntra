@@ -7,6 +7,7 @@ import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
 import { generateAndStoreSnapshot } from "@/lib/snapshotService";
+import { recalculateStreak } from "@/lib/streak";
 import { apiHandler } from "@/lib/apiHandler";
 import { ApiError } from "@/lib/apiError";
 import { 
@@ -69,6 +70,151 @@ const parseCSV = (csvText: string): string[][] => {
 
   return result;
 };
+
+// Helper to normalize column headers with support for common aliases and typos
+function normalizeHeader(h: string): string {
+  const clean = h.replace(/[^a-zA-Z0-9]/g, "").toLowerCase().trim();
+  
+  // Date aliases
+  if (/^(date|logdate)$/i.test(clean)) {
+    return "date";
+  }
+
+  // Health aliases
+  if (/^(sleephours|sleep|hoursofsleep)$/i.test(clean)) {
+    return "sleephours";
+  }
+  if (/^(workoutminutes|workout|exercise|workoutmins|exerciseminutes)$/i.test(clean)) {
+    return "workoutminutes";
+  }
+  if (/^(stresslevel|stress)$/i.test(clean)) {
+    return "stresslevel";
+  }
+  if (/^(moodscore|mood)$/i.test(clean)) {
+    return "moodscore";
+  }
+  if (/^(energylevel|energy)$/i.test(clean)) {
+    return "energylevel";
+  }
+  if (/^(caloriesconsumed|calories|caloriesspent)$/i.test(clean)) {
+    return "caloriesconsumed";
+  }
+  if (/^caloriegoal$/i.test(clean)) {
+    return "caloriegoal";
+  }
+  if (/^(waterglasses|water|glassesofwater)$/i.test(clean)) {
+    return "waterglasses";
+  }
+
+  // Finance aliases
+  if (/^(amountsaved|saved|savings|amtsaved|amountsavedtoday)$/i.test(clean)) {
+    return "amountsaved";
+  }
+  if (/^(discretionaryspent|discretionaryspend|discretionaryspending|discretionary|spend|spent|spending|spendings|expense|expenses|expenditure|sicretionaryspent|sicretionaryspend|sicretionaryspending|sicretionary|secretionaryspend|secretionaryspent|secretionaryspending)$/i.test(clean)) {
+    return "discretionaryspent";
+  }
+  if (/^(spendingcategory|category)$/i.test(clean)) {
+    return "spendingcategory";
+  }
+  if (/^(spendingtime|time)$/i.test(clean)) {
+    return "spendingtime";
+  }
+  if (/^(biggestexpensetoday|biggestexpense)$/i.test(clean)) {
+    return "biggestexpensetoday";
+  }
+  if (/^(impulsespend|impulse)$/i.test(clean)) {
+    return "impulsespend";
+  }
+
+  // Career aliases
+  if (/^(hoursstudied|studyhours|hours|study|studied)$/i.test(clean)) {
+    return "hoursstudied";
+  }
+  if (/^(productivityrating|productivity|rating)$/i.test(clean)) {
+    return "productivityrating";
+  }
+  if (/^(sessionscompleted|sessions)$/i.test(clean)) {
+    return "sessionscompleted";
+  }
+  if (/^(coursename|course)$/i.test(clean)) {
+    return "coursename";
+  }
+  if (/^(goalworkedon|goal)$/i.test(clean)) {
+    return "goalworkedon";
+  }
+  if (/^(blockertoday|blocker)$/i.test(clean)) {
+    return "blockertoday";
+  }
+
+  return clean;
+}
+
+// Helper to parse and format dates from diverse formats into YYYY-MM-DD
+function parseAndFormatDate(val: any): string | null {
+  if (!val) return null;
+
+  // 1. If it is already a Date object (often happens with SheetJS cellDates: true)
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return null;
+    return val.toISOString().split("T")[0];
+  }
+
+  const str = String(val).trim();
+  if (!str) return null;
+
+  // 2. Check if it matches YYYY-MM-DD directly
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
+  // 3. Try parsing as Excel serial number if it is a number
+  const num = Number(str);
+  if (!isNaN(num) && num > 30000 && num < 60000) {
+    // Excel date epoch is Jan 1 1900.
+    const date = new Date((num - 25569) * 86400 * 1000);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split("T")[0];
+    }
+  }
+
+  // 4. Try parsing common string formats
+  // Format: YYYY/MM/DD
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(str)) {
+    return str.replace(/\//g, "-");
+  }
+
+  // Format: DD/MM/YYYY or DD-MM-YYYY or MM/DD/YYYY or MM-DD-YYYY
+  const match = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (match) {
+    const day = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const year = parseInt(match[3], 10);
+    let parsedMonth = month;
+    let parsedDay = day;
+    if (month > 12 && day <= 12) {
+      parsedMonth = day;
+      parsedDay = month;
+    }
+    const date = new Date(year, parsedMonth - 1, parsedDay);
+    if (!isNaN(date.getTime())) {
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, "0");
+      const dd = String(date.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+  }
+
+  // Fallback to standard JS date parsing for other strings
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    const dd = String(parsed.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return null;
+}
 
 // Robust row-level validator
 function validateRow(domain: string, record: Record<string, any>, dateVal: string, rowIndex: number) {
@@ -187,8 +333,8 @@ export const POST = apiHandler(async (req: Request) => {
     throw new ApiError(400, "No data found or CSV file is empty");
   }
 
-  const headers = parsedRows[0].map(h => h.toLowerCase().trim());
-  const normalizedHeaders = headers.map(h => h.replace(/[\s_-]+/g, "").toLowerCase().trim());
+  const headers = parsedRows[0].map(h => h.trim());
+  const normalizedHeaders = headers.map(h => normalizeHeader(h));
 
   // Define normalized required columns
   const requiredCols: Record<string, string[]> = {
@@ -273,11 +419,12 @@ export const POST = apiHandler(async (req: Request) => {
       if (!header) continue;
       const val = row[j] || "";
       
-      const normalizedHeader = header.replace(/[\s_-]+/g, "").toLowerCase().trim();
+      const normalizedHeader = normalizeHeader(header);
       const standardHeader = camelCaseMap[normalizedHeader] || header;
 
       if (normalizedHeader === "date") {
-        rawDateVal = val.trim();
+        const parsedDate = parseAndFormatDate(val);
+        rawDateVal = parsedDate || val.trim();
       } else if (numericFields.includes(normalizedHeader)) {
         const num = Number(val);
         record[standardHeader] = !isNaN(num) && val !== "" ? num : undefined;
@@ -321,7 +468,9 @@ export const POST = apiHandler(async (req: Request) => {
       newScore = calculateFinanceScore(
         Number(data.amountSaved) || 0,
         Number(data.discretionarySpent) || 0,
-        data.impulseSpend === true || String(data.impulseSpend).toLowerCase() === "true"
+        data.impulseSpend === true || String(data.impulseSpend).toLowerCase() === "true",
+        user.profile?.monthlyIncome,
+        user.profile?.monthlyBudget
       );
     } else if (domain === "career") {
       newScore = calculateCareerScore(
@@ -338,17 +487,7 @@ export const POST = apiHandler(async (req: Request) => {
   user.gamification.totalPoints += 50; // Ingestion bonus
 
   // Streak logic
-  const lastLog = user.gamification.lastLogDate ? new Date(user.gamification.lastLogDate) : null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (lastLog) lastLog.setHours(0, 0, 0, 0);
-
-  if (!lastLog || lastLog.getTime() !== today.getTime()) {
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    user.gamification.currentStreak = (lastLog && lastLog.getTime() === yesterday.getTime()) ? user.gamification.currentStreak + 1 : 1;
-    user.gamification.lastLogDate = new Date();
-  }
+  await recalculateStreak(user);
 
   // Award badges
   const newBadges: string[] = [];
@@ -381,7 +520,7 @@ export const POST = apiHandler(async (req: Request) => {
 
   // 3. Fire the protected background task (with the pre-fetched / updated user)
   waitUntil(
-    generateAndStoreSnapshot(user._id.toString(), user).catch(err => {
+    generateAndStoreSnapshot(user._id.toString(), user, undefined, true).catch(err => {
       console.error("[CRITICAL] Background Snapshot Failed:", err);
     })
   );

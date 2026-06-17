@@ -29,6 +29,10 @@ export interface GeminiOptions {
   baseDelayMs?: number;
   temperature?: number;
   maxTokens?: number;
+  image?: {
+    mimeType: string;
+    data: string;
+  };
 }
 
 /**
@@ -49,13 +53,23 @@ export async function callGemini<T = any>(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      const parts: any[] = [{ text: prompt }];
+      if (options.image) {
+        parts.push({
+          inlineData: {
+            mimeType: options.image.mimeType,
+            data: options.image.data,
+          }
+        });
+      }
+
       const res = await fetch(ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{ parts }],
           generationConfig: {
             temperature,
             responseMimeType: "application/json",

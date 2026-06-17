@@ -169,6 +169,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [aiData, setAiData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [aiLoading, setAiLoading] = useState(true);
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -218,15 +219,32 @@ export default function DashboardPage() {
 
   const fetchAll = async () => {
     setSyncing(true);
-    try {
-      const [r1, r2] = await Promise.all([
-        fetch("/api/dashboard", { cache: "no-store", credentials: "include" }),
-        fetch("/api/ai/recommend", { cache: "no-store", credentials: "include" }),
-      ]);
-      if (r1.ok) { const d = await r1.json(); setData(d.dashboard); }
-      if (r2.ok) { const a = await r2.json(); setAiData(a.ai); }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); setSyncing(false); }
+    setAiLoading(true);
+    
+    // Fetch core dashboard data first (extremely fast)
+    fetch("/api/dashboard", { cache: "no-store", credentials: "include" })
+      .then(async (res) => {
+        if (res.ok) {
+          const d = await res.json();
+          setData(d.dashboard);
+        }
+      })
+      .catch((e) => console.error("Dashboard load failed:", e))
+      .finally(() => setLoading(false));
+
+    // Fetch AI recommendations in parallel, but do not block the page load
+    fetch("/api/ai/recommend", { cache: "no-store", credentials: "include" })
+      .then(async (res) => {
+        if (res.ok) {
+          const a = await res.json();
+          setAiData(a.ai);
+        }
+      })
+      .catch((e) => console.error("AI load failed:", e))
+      .finally(() => {
+        setSyncing(false);
+        setAiLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -282,9 +300,12 @@ export default function DashboardPage() {
   const latestHealthLog = logs.find(l => l.domain === "health")?.domainData || {};
   const currentSleep = latestHealthLog.sleepHours || 6.1;
   const currentStudy = logs.find(l => l.domain === "career")?.domainData?.hoursStudied || 3.4;
-  // Use the user's directly-entered current savings from their profile (set during onboarding),
-  // not the derived amountSaved log value which is a backend-computed budget template estimate.
-  const currentSavings = profile?.currentSavings ?? (logs.find(l => l.domain === "finance")?.domainData?.amountSaved ?? 0) * 30;
+  // Use the user's directly-entered profile settings (income - budget) representing their monthly savings,
+  // falling back to their latest finance log or 10,000 as default, so it aligns with their account configuration.
+  const profileSavings = (profile?.monthlyIncome && profile?.monthlyBudget) ? (profile.monthlyIncome - profile.monthlyBudget) : 0;
+  const logsSavings = (logs.find(l => l.domain === "finance")?.domainData?.amountSaved ?? 0) * 30;
+  const currentMonthlySavings = profileSavings || logsSavings || 10000;
+
 
   const activeGoal = data.goals?.[0] ?? null;
   let daysRemaining = 412;
@@ -311,9 +332,9 @@ export default function DashboardPage() {
 
   // Real-time projections utilizing Twin Sync as consistency driver
   const projectedSleep = Number((currentSleep + (8.0 - currentSleep) * (twinSync / 100)).toFixed(1));
-  const projectedSavings = currentSavings >= targetMonthlySavings 
-    ? Math.round(currentSavings * (1 + (twinSync / 1000))) 
-    : Math.round(currentSavings + (targetMonthlySavings - currentSavings) * (twinSync / 100));
+  const projectedMonthlySavings = currentMonthlySavings >= targetMonthlySavings 
+    ? Math.round(currentMonthlySavings * (1 + (twinSync / 1000))) 
+    : Math.round(currentMonthlySavings + (targetMonthlySavings - currentMonthlySavings) * (twinSync / 100));
   const projectedStudy = currentStudy >= targetStudy 
     ? Number((currentStudy * (1 + (twinSync / 1000))).toFixed(1))
     : Number((currentStudy + (targetStudy - currentStudy) * (twinSync / 100)).toFixed(1));
@@ -327,7 +348,7 @@ export default function DashboardPage() {
 
   const cvfMetrics = [
     { label: "Daily Sleep",      now: `${currentSleep}h`,                           future: `${projectedSleep}h`,      nowPct: Math.min(100, Math.round((currentSleep/9)*100)),    futurePct: Math.min(100, Math.round((projectedSleep/9)*100)), warn: currentSleep < 6.5 },
-    { label: "Monthly Savings",  now: `₹${currentSavings.toLocaleString("en-IN")}`, future: `₹${projectedSavings.toLocaleString("en-IN")}`, nowPct: Math.min(100, Math.round((currentSavings/(targetMonthlySavings || 1))*100)), futurePct: Math.min(100, Math.round((projectedSavings/(targetMonthlySavings || 1))*100)), warn: false },
+    { label: "Monthly Savings",  now: `₹${currentMonthlySavings.toLocaleString("en-IN")}`, future: `₹${projectedMonthlySavings.toLocaleString("en-IN")}`, nowPct: Math.min(100, Math.round((currentMonthlySavings/(targetMonthlySavings || 1))*100)), futurePct: Math.min(100, Math.round((projectedMonthlySavings/(targetMonthlySavings || 1))*100)), warn: false },
     { label: "Study Hours/Day",  now: `${currentStudy}h`,                           future: `${projectedStudy}h`,      nowPct: Math.min(100, Math.round((currentStudy/8)*100)),     futurePct: Math.min(100, Math.round((projectedStudy/8)*100)), warn: false },
     { label: "Health Score",     now: `${healthScore}`,                             future: `${projectedHealthScore}`,        nowPct: healthScore,  futurePct: projectedHealthScore, warn: healthScore < 60 },
     { label: "Career Score",     now: `${careerScore}`,                             future: `${projectedCareerScore}`,        nowPct: careerScore,  futurePct: projectedCareerScore, warn: careerScore < 60 },
@@ -341,6 +362,19 @@ export default function DashboardPage() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        .shimmer-text {
+          background: linear-gradient(90deg, rgba(0,0,0,0.04) 25%, rgba(0,0,0,0.09) 50%, rgba(0,0,0,0.04) 75%);
+          background-size: 200% 100%;
+          animation: shimmer 1.5s infinite;
+          border-radius: 4px;
+          display: inline-block;
+          height: 1em;
+        }
 
         /* ── NAV ── */
         .nav-wrapper { position: fixed; top: 0; left: 0; width: 100%; z-index: 1000; transition: all 0.3s ease; background: rgba(255,255,255,0); }
@@ -929,7 +963,13 @@ export default function DashboardPage() {
                   </div>
                   <div className="cvf-pill">
                     <div>
-                      <div className="cvf-pill-val" style={{ color: "#4ade80" }}>{aiData?.confidence || 84}%</div>
+                      <div className="cvf-pill-val" style={{ color: "#4ade80" }}>
+                        {aiLoading ? (
+                          <span className="shimmer-text" style={{ width: 34, height: 20, verticalAlign: "middle" }} />
+                        ) : (
+                          `${aiData?.confidence || 84}%`
+                        )}
+                      </div>
                       <div className="cvf-pill-lbl">Confidence</div>
                     </div>
                   </div>
@@ -994,10 +1034,17 @@ export default function DashboardPage() {
             <div className="cvf-outcome-icon">
               <Zap size={16} color="#fff" />
             </div>
-            <div className="cvf-outcome-body">
+            <div className="cvf-outcome-body" style={{ width: "100%" }}>
               <div className="cvf-outcome-eyebrow">Projected Outcome</div>
-              <div className="cvf-outcome-text">
-                {aiData?.twinPrediction || "Career Acceleration Likely in 4–6 months. Consistently logging your sleep and spending this week will significantly improve prediction accuracy."}
+              <div className="cvf-outcome-text" style={{ width: "100%" }}>
+                {aiLoading ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", marginTop: 4 }}>
+                    <span className="shimmer-text" style={{ width: "95%", height: 14 }} />
+                    <span className="shimmer-text" style={{ width: "70%", height: 14 }} />
+                  </div>
+                ) : (
+                  aiData?.twinPrediction || "Career Acceleration Likely in 4–6 months. Consistently logging your sleep and spending this week will significantly improve prediction accuracy."
+                )}
               </div>
             </div>
           </div>
@@ -1233,19 +1280,33 @@ export default function DashboardPage() {
 
           <div className="insights-col">
             <div className="insights-col-label">AI Insight Feed</div>
-            {[
-              { tag: "Twin Prediction", text: aiData?.twinPrediction || "Your career trajectory is projected to improve significantly with consistent study habits." },
-              { tag: "Daily Reflection", text: aiData?.dailyReflection || "Your consistency over the past week is building strong long-term momentum." },
-              { tag: "Daily Challenge", text: aiData?.dailyChallenge || "Log all three domains today to expand your Twin Sync calibration index." },
-            ].map((ins, idx) => (
-              <div key={idx} className="insight-card">
-                <div className="insight-tag-row">
-                  <span className="insight-tag">{ins.tag}</span>
-                  <ArrowUpRight size={14} style={{ color: "#9ca3af" }} />
+            {aiLoading ? (
+              Array.from({ length: 3 }).map((_, idx) => (
+                <div key={idx} className="insight-card">
+                  <div className="insight-tag-row">
+                    <span className="shimmer-text" style={{ width: 100, height: 12 }} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                    <span className="shimmer-text" style={{ width: "100%", height: 14 }} />
+                    <span className="shimmer-text" style={{ width: "80%", height: 14 }} />
+                  </div>
                 </div>
-                <div className="insight-text">{ins.text}</div>
-              </div>
-            ))}
+              ))
+            ) : (
+              [
+                { tag: "Twin Prediction", text: aiData?.twinPrediction || "Your career trajectory is projected to improve significantly with consistent study habits." },
+                { tag: "Daily Reflection", text: aiData?.dailyReflection || "Your consistency over the past week is building strong long-term momentum." },
+                { tag: "Daily Challenge", text: aiData?.dailyChallenge || "Log all three domains today to expand your Twin Sync calibration index." },
+              ].map((ins, idx) => (
+                <div key={idx} className="insight-card">
+                  <div className="insight-tag-row">
+                    <span className="insight-tag">{ins.tag}</span>
+                    <ArrowUpRight size={14} style={{ color: "#9ca3af" }} />
+                  </div>
+                  <div className="insight-text">{ins.text}</div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

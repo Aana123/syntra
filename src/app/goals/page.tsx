@@ -271,12 +271,20 @@ function ProgressBar({ pct, color, height = 8, animated = false }: {
   pct: number; color: string; height?: number; animated?: boolean;
 }) {
   return (
-    <div style={{ height, background:"#EEF1F8", borderRadius:9999, overflow:"hidden" }}>
+    <div style={{ height, background:"#EEF1F8", borderRadius:9999, overflow:"hidden", position:"relative" }}>
       <div style={{
         height:"100%", width:`${pct}%`, background:color, borderRadius:9999,
         transition:"width 1.2s cubic-bezier(0.16,1,0.3,1)",
         boxShadow: animated ? `0 0 12px ${color}66` : "none",
-      }}/>
+        position:"relative",
+        overflow:"hidden"
+      }}>
+        <div style={{
+          position:"absolute", inset:0,
+          background:"linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.3) 50%, rgba(255,255,255,0) 100%)",
+          animation:"progress-shine 2s infinite"
+        }}/>
+      </div>
     </div>
   );
 }
@@ -469,54 +477,56 @@ function GamificationScreen({
         <div className="gam-two-col">
 
           {/* DAILY CHALLENGE */}
-          <div className="section-hd" style={{ marginBottom:0 }}><span className="section-hd-label">Today's Challenge</span><div className="section-hd-rule"/></div>
-          <div className="daily-challenge-card">
-            <div className="dc-header">
-              <div className="dc-icon-wrap">
-                <Target size={22} color="#fff"/>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div className="dc-eyebrow">Today's Challenge</div>
-                <div className="dc-title">
-                  {isFallbackChallenge ? "Drink 8 Glasses of Water" : "Personalized Nudge"}
+          <div>
+            <div className="section-hd" style={{ marginBottom:0 }}><span className="section-hd-label">Today's Challenge</span><div className="section-hd-rule"/></div>
+            <div className="daily-challenge-card">
+              <div className="dc-header">
+                <div className="dc-icon-wrap">
+                  <Target size={22} color="#fff"/>
                 </div>
-                {!isFallbackChallenge && (
-                  <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.5, fontWeight: 500 }}>
-                    {aiChallenge}
-                  </p>
-                )}
-                <div className="dc-xp">+20 XP</div>
-              </div>
-            </div>
-            {isFallbackChallenge ? (
-              <>
-                <div style={{ margin:"18px 0 10px" }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                    <span style={{ fontSize:"0.78rem", fontWeight:600, color:"var(--text-secondary)" }}>Progress</span>
-                    <span style={{ fontSize:"0.78rem", fontWeight:800, color:BRAND }}>{waterCount} / 8 Glasses</span>
+                <div style={{ flex: 1 }}>
+                  <div className="dc-eyebrow">Today's Challenge</div>
+                  <div className="dc-title">
+                    {isFallbackChallenge ? "Drink 8 Glasses of Water" : "Personalized Nudge"}
                   </div>
-                  <ProgressBar pct={Math.round((waterCount/8)*100)} color="url(#brandGrad)" height={10} animated/>
-                  <svg width="0" height="0"><defs>
-                    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#0047D4"/>
-                      <stop offset="100%" stopColor="#2A18E8"/>
-                    </linearGradient>
-                  </defs></svg>
+                  {!isFallbackChallenge && (
+                    <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.5, fontWeight: 500 }}>
+                      {aiChallenge}
+                    </p>
+                  )}
+                  <div className="dc-xp">+20 XP</div>
                 </div>
-                <div style={{ display:"flex", gap:10, marginTop:16 }}>
-                  <button className="dc-cta-btn" onClick={handleWaterProgress} disabled={challengeCompleted}>
-                    {challengeCompleted ? "Challenge Completed! 🎉" : "Mark Progress"}
-                  </button>
-                  {waterCount > 0 && !challengeCompleted && <button className="dc-reset-btn" onClick={() => setWaterCount(0)}>Reset</button>}
-                </div>
-              </>
-            ) : (
-              <div style={{ display:"flex", gap:10, marginTop:24 }}>
-                <button className="dc-cta-btn" onClick={handleDirectComplete} disabled={challengeCompleted}>
-                  {challengeCompleted ? "Challenge Completed! 🎉" : "Mark Completed"}
-                </button>
               </div>
-            )}
+              {isFallbackChallenge ? (
+                <>
+                  <div style={{ margin:"18px 0 10px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                      <span style={{ fontSize:"0.78rem", fontWeight:600, color:"var(--text-secondary)" }}>Progress</span>
+                      <span style={{ fontSize:"0.78rem", fontWeight:800, color:BRAND }}>{waterCount} / 8 Glasses</span>
+                    </div>
+                    <ProgressBar pct={Math.round((waterCount/8)*100)} color="url(#brandGrad)" height={10} animated/>
+                    <svg width="0" height="0"><defs>
+                      <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#0047D4"/>
+                        <stop offset="100%" stopColor="#2A18E8"/>
+                      </linearGradient>
+                    </defs></svg>
+                  </div>
+                  <div style={{ display:"flex", gap:10, marginTop:16 }}>
+                    <button className="dc-cta-btn" onClick={handleWaterProgress} disabled={challengeCompleted}>
+                      {challengeCompleted ? "Challenge Completed! 🎉" : "Mark Progress"}
+                    </button>
+                    {waterCount > 0 && !challengeCompleted && <button className="dc-reset-btn" onClick={() => setWaterCount(0)}>Reset</button>}
+                  </div>
+                </>
+              ) : (
+                <div style={{ display:"flex", gap:10, marginTop:24 }}>
+                  <button className="dc-cta-btn" onClick={handleDirectComplete} disabled={challengeCompleted}>
+                    {challengeCompleted ? "Challenge Completed! 🎉" : "Mark Completed"}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* STREAK TRACKER */}
@@ -619,7 +629,15 @@ function GamificationScreen({
                     background:"linear-gradient(90deg,#d97706,#f59e0b)",
                     borderRadius:9999, transition:"width 1.4s cubic-bezier(0.16,1,0.3,1)",
                     boxShadow:"0 0 14px rgba(217,119,6,0.4)",
-                  }}/>
+                    position:"relative",
+                    overflow:"hidden"
+                  }}>
+                    <div style={{
+                      position:"absolute", inset:0,
+                      background:"linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%)",
+                      animation:"progress-shine 2s infinite"
+                    }}/>
+                  </div>
                 </div>
               </div>
               <div className="xp-remaining-badge">
@@ -922,6 +940,7 @@ export default function GoalsPage() {
         @keyframes badge-glow  { 0%,100%{box-shadow:0 0 0 0 transparent;}50%{box-shadow:0 0 18px 4px var(--badge-color,#7c3aed);} }
         @keyframes xp-fill     { from{width:0;}to{width:var(--target-w,80%);} }
         @keyframes progress-shine { 0%{transform:translateX(-100%);}100%{transform:translateX(400%);} }
+        @keyframes current-day-glow { 0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,0.4);border-color:#7c3aed;}50%{box-shadow:0 0 0 6px rgba(124,58,237,0.15);border-color:#a78bfa;} }
 
         /* ═══════════════════════════════════════
            TOP NAVBAR
@@ -1219,24 +1238,24 @@ export default function GoalsPage() {
         }
         .pob-card {
           flex:1;padding:20px 16px;display:flex;flex-direction:column;align-items:center;gap:8px;
-          position:relative;transition:background 0.2s;
+          position:relative;transition:all 0.25s cubic-bezier(0.16,1,0.3,1);
         }
-        .pob-card:hover { background:rgba(0,71,212,0.02); }
+        .pob-card:hover { background:rgba(0,71,212,0.03); transform: translateY(-3px); }
         .pob-card-level { flex:1.4; }
         .pob-divider { width:1px;background:var(--border);margin:12px 0;flex-shrink:0; }
         .pob-icon-wrap {
           width:44px;height:44px;border-radius:14px;
           display:flex;align-items:center;justify-content:center;
-          transition:transform 0.2s;
+          transition:transform 0.25s cubic-bezier(0.16,1,0.3,1);
         }
-        .pob-card:hover .pob-icon-wrap { transform:scale(1.1); }
+        .pob-card:hover .pob-icon-wrap { transform:scale(1.12); }
         .pob-flame { animation:flame-pulse 2s ease-in-out infinite; }
         .pob-value { font-family:"DM Sans",sans-serif;font-size:1.5rem;font-weight:900;color:var(--text-primary);letter-spacing:-0.04em;line-height:1; }
         .pob-label { font-size:0.63rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;text-align:center; }
-
+ 
         /* TWO COLUMN LAYOUT */
         .gam-two-col { display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:32px; }
-
+ 
         /* DAILY CHALLENGE CARD */
         .daily-challenge-card {
           background:var(--surface);border:1px solid rgba(0,0,0,0.07);border-radius:20px;
@@ -1254,7 +1273,7 @@ export default function GoalsPage() {
         .dc-cta-btn:hover { filter:brightness(1.07);transform:translateY(-1px); }
         .dc-reset-btn { padding:11px 16px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-family:"Inter",sans-serif;font-size:0.84rem;font-weight:600;cursor:pointer;transition:all 0.2s; }
         .dc-reset-btn:hover { border-color:var(--brand-mid);color:var(--brand); }
-
+ 
         /* STREAK CARD */
         .streak-card {
           background:var(--surface);border:1px solid rgba(0,0,0,0.07);border-radius:20px;
@@ -1276,10 +1295,10 @@ export default function GoalsPage() {
           display:flex;align-items:center;justify-content:center;
           transition:all 0.2s;
         }
-        .streak-day-dot.done { background:#16a34a;border-color:#16a34a;box-shadow:0 2px 8px rgba(22,163,74,0.35); }
-        .streak-day-dot.current { background:transparent;border-color:#7c3aed;border-width:2.5px;box-shadow:0 0 0 3px rgba(124,58,237,0.15); }
+        .streak-day-dot.done { background:linear-gradient(135deg, #22c55e, #16a34a);border-color:#16a34a;box-shadow:0 2px 8px rgba(22,163,74,0.35); }
+        .streak-day-dot.current { background:transparent;border-color:#7c3aed;border-width:2.5px;animation:current-day-glow 2s infinite; }
         .streak-footer { padding-top:12px;border-top:1px solid var(--border); }
-
+ 
         /* BADGES CARD */
         .badges-card {
           background:var(--surface);border:1px solid rgba(0,0,0,0.07);border-radius:20px;
@@ -1289,9 +1308,9 @@ export default function GoalsPage() {
         .badges-card:hover { box-shadow:var(--shadow-hover); }
         .badges-header { padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:20px; }
         .badges-grid { display:grid;grid-template-columns:repeat(6,1fr);gap:12px; }
-        .badge-item { display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 8px;border-radius:16px;transition:all 0.22s;cursor:default; }
-        .badge-unlocked { background:rgba(124,58,237,0.03); }
-        .badge-unlocked:hover { background:rgba(124,58,237,0.06);transform:translateY(-3px); }
+        .badge-item { display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 8px;border-radius:16px;transition:all 0.26s cubic-bezier(0.16,1,0.3,1);cursor:default;border:1px solid transparent; }
+        .badge-unlocked { background:rgba(124,58,237,0.03); border-color:rgba(124,58,237,0.05); }
+        .badge-unlocked:hover { background:var(--surface);border-color:var(--badge-color,#7c3aed);transform:translateY(-4px);box-shadow: 0 10px 20px -5px rgba(0,0,0,0.05), 0 0 12px 2px var(--badge-color)22; }
         .badge-locked { opacity:0.55; }
         .badge-icon-wrap { width:60px;height:60px;border-radius:18px;display:flex;align-items:center;justify-content:center;border:2px solid transparent;transition:all 0.22s; }
         .badge-unlocked .badge-icon-wrap { animation:badge-glow 3s ease-in-out infinite; }
@@ -1300,7 +1319,7 @@ export default function GoalsPage() {
         .badge-level { font-size:0.62rem;font-weight:600;text-align:center; }
         .view-all-achievements-btn { background:none;border:none;color:var(--brand);font-family:"Inter",sans-serif;font-size:0.84rem;font-weight:700;cursor:pointer;padding:8px 16px;border-radius:8px;transition:background 0.18s; }
         .view-all-achievements-btn:hover { background:var(--brand-light); }
-
+ 
         /* XP CARD */
         .xp-card {
           background:var(--surface);border:1px solid rgba(0,0,0,0.07);border-radius:20px;
@@ -1310,7 +1329,7 @@ export default function GoalsPage() {
         .xp-card:hover { box-shadow:var(--shadow-hover);transform:translateY(-2px); }
         .xp-remaining-badge { display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;background:rgba(217,119,6,0.08);border:1px solid rgba(217,119,6,0.2);border-radius:9999px;font-size:0.73rem;font-weight:700;color:#d97706;width:fit-content;margin:0 auto; }
         .level-badge-display { display:inline-flex;align-items:center;gap:7px;padding:8px 18px;background:linear-gradient(135deg,rgba(124,58,237,0.08),rgba(124,58,237,0.05));border:1.5px solid rgba(124,58,237,0.2);border-radius:9999px;font-family:"DM Sans",sans-serif;font-size:0.84rem;font-weight:800;color:#7c3aed; }
-
+ 
         /* TIMELINE CARD */
         .timeline-card {
           background:var(--surface);border:1px solid rgba(0,0,0,0.07);border-radius:20px;
@@ -1318,7 +1337,8 @@ export default function GoalsPage() {
           transition:all 0.24s cubic-bezier(0.16,1,0.3,1);
         }
         .timeline-card:hover { box-shadow:var(--shadow-hover);transform:translateY(-2px); }
-        .timeline-item { display:flex;gap:14px;position:relative; }
+        .timeline-item { display:flex;gap:14px;position:relative; transition:all 0.2s; padding: 4px; border-radius: 8px; }
+        .timeline-item:hover { background:rgba(0,71,212,0.02); }
         .timeline-connector { display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:40px; }
         .timeline-dot { width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform 0.2s; }
         .timeline-item:hover .timeline-dot { transform:scale(1.1); }

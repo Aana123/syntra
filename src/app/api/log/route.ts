@@ -12,6 +12,7 @@ import {
 } from "@/lib/scoring";
 import { IngestionSchema } from "@/lib/validators";
 import { generateAndStoreSnapshot } from "@/lib/snapshotService";
+import { recalculateStreak } from "@/lib/streak";
 import { apiHandler } from "@/lib/apiHandler";
 import { ApiError } from "@/lib/apiError";
 
@@ -64,7 +65,7 @@ export const POST = apiHandler(async (req: Request) => {
       break;
     }
     case "finance": {
-      const newScore = calculateFinanceScore(data.amountSaved, data.discretionarySpent, data.impulseSpend);
+      const newScore = calculateFinanceScore(data.amountSaved, data.discretionarySpent, data.impulseSpend, user.profile?.monthlyIncome, user.profile?.monthlyBudget);
       user.scores.finance = Math.round((user.scores.finance * (1 - smoothingFactor)) + (newScore * smoothingFactor));
       break;
     }
@@ -79,30 +80,8 @@ export const POST = apiHandler(async (req: Request) => {
   const updatedScore = domain === "health" ? user.scores.health : domain === "finance" ? user.scores.finance : user.scores.career;
   user.gamification.totalPoints += calculateEarnedXP(updatedScore);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const lastLog = user.gamification.lastLogDate 
-    ? new Date(user.gamification.lastLogDate) 
-    : null;
-
-  if (lastLog) lastLog.setHours(0, 0, 0, 0);
-
-  const todayStr = today.toDateString();
-  const lastLogStr = lastLog?.toDateString();
-
-  if (lastLogStr !== todayStr) {
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    // If last log was yesterday, increment. Otherwise, reset to 1.
-    user.gamification.currentStreak = 
-      lastLogStr === yesterday.toDateString() 
-        ? user.gamification.currentStreak + 1 
-        : 1;
-        
-    user.gamification.lastLogDate = new Date();
-  }
+  // Recalculate streak
+  await recalculateStreak(user);
 
   // 6.5 CHECK AND AWARD BADGES (The Gamification Engine)
   const newBadges: string[] = [];
@@ -135,7 +114,7 @@ export const POST = apiHandler(async (req: Request) => {
 
   // 7.5 Trigger asynchronous background AI snapshot pre-generation wrapped in waitUntil
   waitUntil(
-    generateAndStoreSnapshot(user._id.toString()).catch(err => {
+    generateAndStoreSnapshot(user._id.toString(), user, undefined, true).catch(err => {
       console.error("[CRITICAL] Background Snapshot Failed:", err);
     })
   );

@@ -12,6 +12,7 @@ import {
 } from "@/lib/scoring";
 import { DailyLogSchema } from "@/lib/validators";
 import { generateAndStoreSnapshot } from "@/lib/snapshotService";
+import { recalculateStreak } from "@/lib/streak";
 import { apiHandler } from "@/lib/apiHandler";
 import { ApiError } from "@/lib/apiError";
 
@@ -97,7 +98,9 @@ export const POST = apiHandler(async (req: Request) => {
   const newFinanceScore = calculateFinanceScore(
     finance.amountSaved,
     finance.discretionarySpent,
-    finance.impulseSpend
+    finance.impulseSpend,
+    user.profile?.monthlyIncome,
+    user.profile?.monthlyBudget
   );
   user.scores.finance = Math.round(
     user.scores.finance * (1 - smoothingFactor) +
@@ -120,29 +123,8 @@ export const POST = apiHandler(async (req: Request) => {
   );
   user.gamification.totalPoints += calculateEarnedXP(avgScore);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const lastLog = user.gamification.lastLogDate
-    ? new Date(user.gamification.lastLogDate)
-    : null;
-
-  if (lastLog) lastLog.setHours(0, 0, 0, 0);
-
-  const todayStr = today.toDateString();
-  const lastLogStr = lastLog?.toDateString();
-
-  if (lastLogStr !== todayStr) {
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    user.gamification.currentStreak =
-      lastLogStr === yesterday.toDateString()
-        ? user.gamification.currentStreak + 1
-        : 1;
-
-    user.gamification.lastLogDate = new Date();
-  }
+  // Recalculate streak
+  await recalculateStreak(user);
 
   // 8. BADGE CHECKS
   const newBadges: string[] = [];
@@ -191,7 +173,7 @@ export const POST = apiHandler(async (req: Request) => {
   // 10. TRIGGER SINGLE BACKGROUND AI SNAPSHOT
   // Passing the fully updated user object to the snapshot service to completely prevent serverless read-after-write race conditions.
   waitUntil(
-    generateAndStoreSnapshot(user._id.toString(), user).catch((err) => {
+    generateAndStoreSnapshot(user._id.toString(), user, undefined, true).catch((err) => {
       console.error("[CRITICAL] Background Snapshot Failed:", err);
     })
   );

@@ -9,6 +9,7 @@ import { PDFParse } from "pdf-parse";
 import { createWorker } from "tesseract.js";
 import { rl } from "@/lib/rateLimit";
 import { generateAndStoreSnapshot } from "@/lib/snapshotService";
+import { recalculateStreak } from "@/lib/streak";
 import { waitUntil } from "@vercel/functions";
 import { z } from "zod";
 
@@ -100,9 +101,21 @@ export async function POST(req: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     let extractedText = "";
+    let imageOption: { mimeType: string; data: string } | undefined = undefined;
+    const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp)$/i.test(file.name);
 
-    // 1. Extract Text based on file type
-    if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+    // 1. Extract Text / Prepare image based on file type
+    if (isImage) {
+      let mimeType = file.type;
+      if (!mimeType || mimeType === "application/octet-stream") {
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+      }
+      imageOption = {
+        mimeType,
+        data: buffer.toString("base64")
+      };
+    } else if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
       try {
         const parser = new PDFParse({ data: buffer });
         const pdfData = await parser.getText();
@@ -120,19 +133,11 @@ export async function POST(req: Request) {
           console.error("OCR Fallback failed:", ocrErr);
         }
       }
-    } else if (file.type.startsWith("image/") || /\.(png|jpe?g|webp)$/i.test(file.name)) {
-      // Direct OCR on images
-      try {
-        extractedText = await runOCR(buffer);
-      } catch (ocrErr) {
-        console.error("OCR on image failed:", ocrErr);
-        return NextResponse.json({ error: "Failed to extract text from image." }, { status: 400 });
-      }
     } else {
       return NextResponse.json({ error: "Unsupported file format. Please upload PDF or image files." }, { status: 400 });
     }
 
-    if (!extractedText.trim()) {
+    if (!isImage && !extractedText.trim()) {
       return NextResponse.json({ error: "Could not extract any text from the document." }, { status: 400 });
     }
 
@@ -169,9 +174,7 @@ RULES:
 3. Do NOT nest data into sub-objects unless the TypeScript structure explicitly defines them.
 4. If a field is missing from the document, omit it (do not output null).
 5. Be maximally precise with medical biometrics and financial values.
-
---- DOCUMENT TEXT ---
-${extractedText.slice(0, 5000)}
+${isImage ? "" : `\n--- DOCUMENT TEXT ---\n${extractedText.slice(0, 5000)}`}
 `.trim();
 
     // Envelope schema to validate the combined response shape
@@ -180,14 +183,18 @@ ${extractedText.slice(0, 5000)}
       data: z.record(z.string(), z.unknown()),
     });
 
-    const mergedRaw = await callGemini<unknown>(mergedPrompt, { temperature: 0.1, maxTokens: 3000 });
+    const mergedRaw = await callGemini<unknown>(mergedPrompt, {
+      temperature: 0.1,
+      maxTokens: 3000,
+      image: imageOption
+    });
     const envelope = EnvelopeSchema.safeParse(mergedRaw);
 
     if (!envelope.success) {
       console.error("[Ingestion] Merged AI call returned invalid envelope:", envelope.error.issues);
       return NextResponse.json({
         error: "Could not classify or extract document data. Please try again.",
-        rawTextPreview: extractedText.slice(0, 200)
+        rawTextPreview: isImage ? "Image Document" : extractedText.slice(0, 200)
       }, { status: 400 });
     }
 
@@ -416,33 +423,23 @@ ${extractedText.slice(0, 5000)}
     // Award 50 XP points for uploading data layers
     user.gamification.totalPoints += 50;
 
-    // Track active streaks
-    const lastLog = user.gamification.lastLogDate ? new Date(user.gamification.lastLogDate) : null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (lastLog) lastLog.setHours(0, 0, 0, 0);
-
-    if (!lastLog || lastLog.getTime() !== today.getTime()) {
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      user.gamification.currentStreak = (lastLog && lastLog.getTime() === yesterday.getTime()) ? user.gamification.currentStreak + 1 : 1;
-      user.gamification.lastLogDate = new Date();
-    }
+    // Recalculate logging streak
+    await recalculateStreak(user);
 
     user.markModified("profile");
     user.markModified("scores");
     user.markModified("gamification");
     await user.save();
 
-    // Trigger AI snapshot pre-generation to update Twin Insights
+    // Trigger AI snapshot pre-generation to update Twin Insights (forced regeneration)
     try {
       waitUntil(
-        generateAndStoreSnapshot(user._id.toString(), user).catch(err => {
+        generateAndStoreSnapshot(user._id.toString(), user, undefined, true).catch(err => {
           console.error("[CRITICAL] Background Ingestion Snapshot Failed:", err);
         })
       );
     } catch {
-      generateAndStoreSnapshot(user._id.toString(), user).catch(err => {
+      generateAndStoreSnapshot(user._id.toString(), user, undefined, true).catch(err => {
         console.error("[CRITICAL] Background Ingestion Snapshot Failed:", err);
       });
     }
