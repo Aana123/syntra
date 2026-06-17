@@ -702,7 +702,12 @@ function GamificationScreen({
         <div className="rewards-ladder">
           {rewards.map((r, i) => (
             <div key={i} className={`reward-step${r.done ? " reward-done" : ""}`}>
-              {i > 0 && <div className="reward-connector" style={{ background: rewards[i-1].done ? "#22c55e" : "#e2e8f0" }}/>}
+              {i < rewards.length - 1 && (
+                <div 
+                  className="reward-connector" 
+                  style={{ background: r.done ? "#22c55e" : "#e2e8f0" }}
+                />
+              )}
               <div className="reward-icon-wrap" style={{
                 background: r.done ? `${r.color}18` : "#f1f5f9",
                 border: r.done ? `2px solid ${r.color}44` : "2px solid #e2e8f0",
@@ -1371,7 +1376,7 @@ export default function GoalsPage() {
           position:relative;
         }
         .reward-step { flex:1;display:flex;flex-direction:column;align-items:center;gap:10px;position:relative; }
-        .reward-connector { position:absolute;top:34px;right:0;width:100%;height:3px;z-index:0;transform:translateX(50%); }
+        .reward-connector { position:absolute;top:34px;left:50%;width:100%;height:3px;z-index:0;transition:background-color 0.3s ease; }
         .reward-icon-wrap { width:68px;height:68px;border-radius:20px;display:flex;align-items:center;justify-content:center;position:relative;z-index:1;transition:all 0.22s;cursor:default; }
         .reward-done .reward-icon-wrap { animation:scale-in 0.4s ease; }
         .reward-step:hover .reward-icon-wrap { transform:scale(1.07) translateY(-2px); }
