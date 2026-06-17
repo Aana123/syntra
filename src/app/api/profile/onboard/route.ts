@@ -1,7 +1,7 @@
 // src/app/api/profile/onboard/route.ts
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
 import mongoose from "mongoose";

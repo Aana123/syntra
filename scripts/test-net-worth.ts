@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
-import { connectDB } from "../src/lib/mongodb";
+import { connectDB } from "../src/lib/database/mongodb";
 import User from "../src/models/User";
 import AssetLiability from "../src/models/AssetLiability";
 

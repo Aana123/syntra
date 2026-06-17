@@ -1,14 +1,14 @@
 // src/lib/snapshotService.ts
 import mongoose from "mongoose";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
 import AssetLiability from "@/models/AssetLiability";
-import { buildTwinContext } from "@/lib/aiContextBuilder";
-import { calculateConfidence } from "@/lib/confidenceScore";
-import { analyzeBehavioralDrift } from "@/lib/driftEngine";
-import { callGemini } from "@/lib/gemini";
-import { Logger } from "@/lib/logger";
+import { buildTwinContext } from "@/lib/services/aiContextBuilder";
+import { calculateConfidence } from "@/lib/logic/confidenceScore";
+import { analyzeBehavioralDrift } from "@/lib/logic/driftEngine";
+import { callGemini } from "@/lib/services/gemini";
+import { Logger } from "@/lib/utils/logger";
 import { generateaitwinReflection } from "@/lib/prompts/aitwinReflection";
 
 

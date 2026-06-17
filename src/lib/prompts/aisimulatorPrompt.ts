@@ -7,8 +7,8 @@
 // ================================================================
 
 import { SimulatorScenario, SimulatorResponse, TwinContext, DomainScores } from "../../types/ai";
-import { callGemini } from "../gemini";
-import { sanitizeForPrompt } from "../sanitize";
+import { callGemini } from "@/lib/services/gemini";
+import { sanitizeForPrompt } from "@/lib/utils/sanitize";
 import { z } from "zod";
 
 const SimulatorResponseSchema = z.object({

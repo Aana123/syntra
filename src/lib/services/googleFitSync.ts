@@ -1,9 +1,9 @@
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
-import { calculateHealthScore, calculateEarnedXP } from "@/lib/scoring";
-import { recalculateStreak } from "@/lib/streak";
-import { generateAndStoreSnapshot } from "@/lib/snapshotService";
+import { calculateHealthScore, calculateEarnedXP } from "@/lib/logic/scoring";
+import { recalculateStreak } from "@/lib/logic/streak";
+import { generateAndStoreSnapshot } from "@/lib/services/snapshotService";
 
 // Helper to refresh Google Fit OAuth tokens
 async function refreshAccessToken(user: any): Promise<string> {

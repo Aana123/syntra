@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
-import { callGemini } from "@/lib/gemini";
+import { callGemini } from "@/lib/services/gemini";
 import { IngestionSchemaMap } from "@/lib/validators/ingestionSchemas";
 import { PDFParse } from "pdf-parse";
 import { createWorker } from "tesseract.js";
-import { rl } from "@/lib/rateLimit";
-import { generateAndStoreSnapshot } from "@/lib/snapshotService";
-import { recalculateStreak } from "@/lib/streak";
+import { rl } from "@/lib/utils/rateLimit";
+import { generateAndStoreSnapshot } from "@/lib/services/snapshotService";
+import { recalculateStreak } from "@/lib/logic/streak";
 import { waitUntil } from "@vercel/functions";
 import { z } from "zod";
 

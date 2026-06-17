@@ -3,12 +3,12 @@ import { generateObject } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { z } from 'zod';
 import { CHAT_BOT_SYSTEM_PROMPT } from '@/lib/prompts/chatPrompt';
-import { connectDB } from '@/lib/mongodb';
+import { connectDB } from '@/lib/database/mongodb';
 import { getSession } from '@/lib/auth';
 import { getUserById } from '@/services/terminalService';
 import Log from '@/models/Log';
 import mongoose from 'mongoose';
-import { buildTwinContext } from '@/lib/aiContextBuilder';
+import { buildTwinContext } from '@/lib/services/aiContextBuilder';
 
 // Initialize custom Google AI provider using GEMINI_API_KEY
 const googleProvider = createGoogleGenerativeAI({

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
-import { apiHandler } from "@/lib/apiHandler";
-import { ApiError } from "@/lib/apiError";
+import { connectDB } from "@/lib/database/mongodb";
+import { apiHandler } from "@/lib/utils/apiHandler";
+import { ApiError } from "@/lib/utils/apiError";
 import { processTerminalCommand } from "@/services/terminalService";
 
 export const POST = apiHandler(async (req: Request) => {

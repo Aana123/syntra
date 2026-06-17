@@ -1,7 +1,7 @@
 // src/app/api/profile/vector/route.ts
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 
 export async function PATCH(req: Request) {

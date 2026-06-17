@@ -1,14 +1,14 @@
 //src/services/terminalService.ts
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
 import Telemetry from "@/models/Telemetry";
-import { runSimulation } from "@/lib/simulator";
-import { buildTwinContext } from "@/lib/aiContextBuilder";
-import { callGemini } from "@/lib/gemini";
+import { runSimulation } from "@/lib/logic/simulator";
+import { buildTwinContext } from "@/lib/services/aiContextBuilder";
+import { callGemini } from "@/lib/services/gemini";
 import mongoose from "mongoose";
-import { ApiError } from "@/lib/apiError";
-import { memoizeAsync } from "@/lib/memoize";
+import { ApiError } from "@/lib/utils/apiError";
+import { memoizeAsync } from "@/lib/utils/memoize";
 
 
 /**

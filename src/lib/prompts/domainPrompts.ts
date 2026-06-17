@@ -29,8 +29,8 @@
 //
 // ================================================================
 
-import { callGemini } from "../gemini";
-import { sanitizeForPrompt } from "../sanitize";
+import { callGemini } from "@/lib/services/gemini";
+import { sanitizeForPrompt } from "@/lib/utils/sanitize";
 import { z } from "zod";
 
 // ── Lightweight output schemas — enforce shape, not every field ──

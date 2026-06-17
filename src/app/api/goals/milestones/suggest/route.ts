@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { callGemini } from "@/lib/gemini";
-import { sanitizeForPrompt } from "@/lib/sanitize";
-import { rl } from "@/lib/rateLimit";
+import { callGemini } from "@/lib/services/gemini";
+import { sanitizeForPrompt } from "@/lib/utils/sanitize";
+import { rl } from "@/lib/utils/rateLimit";
 import { z } from "zod";
 
 const RequestSchema = z.object({

@@ -13,7 +13,7 @@ import {
   calculateRecoveryScore,
   calculateFatigueIndex,
   calculateBiologicalAge
-} from "@/lib/healthMath";
+} from "@/lib/logic/healthMath";
 
 /* ─── TYPES ─────────────────────────────────────────────────────── */
 type LogType = { domain: string; date: string; domainData?: any };

@@ -1,16 +1,16 @@
 // src/app/api/ai/recommend/route.ts
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
 import AssetLiability from "@/models/AssetLiability";
-import { buildTwinContext } from "@/lib/aiContextBuilder";
-import { calculateConfidence } from "@/lib/confidenceScore";
+import { buildTwinContext } from "@/lib/services/aiContextBuilder";
+import { calculateConfidence } from "@/lib/logic/confidenceScore";
 import { generateaitwinReflection } from "@/lib/prompts/aitwinReflection";
-import { parseGemini } from "@/lib/parseGemini";
-import { preComputeWealthGoals } from "@/lib/financeMath";
-import { rl } from "@/lib/rateLimit";
+import { parseGemini } from "@/lib/services/parseGemini";
+import { preComputeWealthGoals } from "@/lib/logic/financeMath";
+import { rl } from "@/lib/utils/rateLimit";
 
 export async function GET(req: Request) {
   try {

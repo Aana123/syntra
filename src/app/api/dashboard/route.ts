@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { apiHandler } from "@/lib/apiHandler";
-import { ApiError } from "@/lib/apiError";
+import { apiHandler } from "@/lib/utils/apiHandler";
+import { ApiError } from "@/lib/utils/apiError";
 import { getSession } from "@/lib/auth";
 import { getDashboardData } from "@/services/dashboardService";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 
 export const GET = apiHandler(async (req: Request) => {
   // 1. Instant Security Check

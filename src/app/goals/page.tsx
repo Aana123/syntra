@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import useSWR from "swr";
-import { fetcher } from "@/lib/fetcher";
+import { fetcher } from "@/lib/utils/fetcher";
 import {
   HeartPulse, Wallet, Briefcase, Trash2, Target,
   CheckCircle2, ArrowLeft, Plus, Rocket, Calendar,

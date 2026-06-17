@@ -1,7 +1,7 @@
 // src/app/api/assets-liabilities/route.ts
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import AssetLiability from "@/models/AssetLiability";
 
 // Default template structure to return when no records exist

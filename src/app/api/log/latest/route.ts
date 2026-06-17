@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
-import { apiHandler } from "@/lib/apiHandler";
-import { ApiError } from "@/lib/apiError";
+import { apiHandler } from "@/lib/utils/apiHandler";
+import { ApiError } from "@/lib/utils/apiError";
 
 
 export const GET = apiHandler(async () => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import { fetcher } from "@/lib/fetcher";
+import { fetcher } from "@/lib/utils/fetcher";
 import {
   ArrowLeft,
   BrainCircuit,

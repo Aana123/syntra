@@ -1,7 +1,7 @@
 // src/app/api/goals/route.ts
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import mongoose from "mongoose";
 import { z } from "zod";

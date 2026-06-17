@@ -1,13 +1,13 @@
 // src/app/api/simulate/route.ts
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
 import AssetLiability from "@/models/AssetLiability";
-import { runSimulation } from "@/lib/simulator";
-import { buildTwinContext } from "@/lib/aiContextBuilder";
-import { calculateConfidence } from "@/lib/confidenceScore";
+import { runSimulation } from "@/lib/logic/simulator";
+import { buildTwinContext } from "@/lib/services/aiContextBuilder";
+import { calculateConfidence } from "@/lib/logic/confidenceScore";
 import { generateSimulatorInsight } from "@/lib/prompts/aisimulatorPrompt";
 import { 
   preComputeWealthGoals, 
@@ -15,8 +15,8 @@ import {
   calculateCreditCardSavings, 
   calculateSIPDelayCost, 
   calculateMortgagePrepayment 
-} from "@/lib/financeMath";
-import { rl } from "@/lib/rateLimit";
+} from "@/lib/logic/financeMath";
+import { rl } from "@/lib/utils/rateLimit";
 import mongoose from "mongoose";
 import { z } from "zod";
 

@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import useSWR from "swr";
-import { fetcher } from "@/lib/fetcher";
+import { fetcher } from "@/lib/utils/fetcher";
 import {
   Plus, Trash2, Save, RefreshCw, ShieldCheck, AlertTriangle, Info
 } from "lucide-react";

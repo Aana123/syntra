@@ -3,19 +3,19 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
-import { buildTwinContext } from "@/lib/aiContextBuilder";
-import { calculateConfidence } from "@/lib/confidenceScore";
+import { buildTwinContext } from "@/lib/services/aiContextBuilder";
+import { calculateConfidence } from "@/lib/logic/confidenceScore";
 import {
   generateHealthAnalysis,
   generateFinanceAnalysis,
   generateCareerAnalysis,
   DailyNutritionLog,
 } from "@/lib/prompts/domainPrompts";
-import { preComputeWealthGoals } from "@/lib/financeMath";
-import { rl } from "@/lib/rateLimit";
+import { preComputeWealthGoals } from "@/lib/logic/financeMath";
+import { rl } from "@/lib/utils/rateLimit";
 import mongoose from "mongoose";
 
 export async function GET(req: Request) {

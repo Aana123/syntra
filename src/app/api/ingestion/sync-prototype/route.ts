@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
 import AssetLiability from "@/models/AssetLiability";
@@ -9,9 +9,9 @@ import {
   calculateFinanceScore,
   calculateCareerScore,
   calculateEarnedXP
-} from "@/lib/scoring";
-import { generateAndStoreSnapshot } from "@/lib/snapshotService";
-import { recalculateStreak } from "@/lib/streak";
+} from "@/lib/logic/scoring";
+import { generateAndStoreSnapshot } from "@/lib/services/snapshotService";
+import { recalculateStreak } from "@/lib/logic/streak";
 import { sampleAppleHealthData } from "@/lib/prototypeConnectors/sampleAppleHealth";
 import { sampleBankingTemplate } from "@/lib/prototypeConnectors/sampleBanking";
 import { sampleCourseraCourses } from "@/lib/prototypeConnectors/sampleCoursera";

@@ -1,9 +1,9 @@
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
-import { calculateSyntraCore } from "@/lib/scoring";
+import { calculateSyntraCore } from "@/lib/logic/scoring";
 import mongoose from "mongoose";
-import { ApiError } from "@/lib/apiError";
+import { ApiError } from "@/lib/utils/apiError";
 
 
 /**

@@ -2,9 +2,9 @@
 import { NextAuthOptions, getServerSession } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
-import { rl } from "@/lib/rateLimit";
+import { rl } from "@/lib/utils/rateLimit";
 
 export const authOptions: NextAuthOptions = {
   // Use JSON Web Tokens for secure session storage

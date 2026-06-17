@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { syncGoogleFitData } from "@/lib/googleFitSync";
+import { syncGoogleFitData } from "@/lib/services/googleFitSync";
 
 export async function POST(req: Request) {
   try {

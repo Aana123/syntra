@@ -1,6 +1,6 @@
 // src/lib/aiContextBuilder.ts
 import type { TwinContext } from "@/types/ai";
-import { memoize } from "@/lib/memoize";
+import { memoize } from "@/lib/utils/memoize";
 
 function calculateTwinContext(
   logs: any[],

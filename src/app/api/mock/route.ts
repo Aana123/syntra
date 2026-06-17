@@ -1,18 +1,18 @@
 // src/app/api/mock/route.ts
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
-import { generateAndStoreSnapshot } from "@/lib/snapshotService";
+import { generateAndStoreSnapshot } from "@/lib/services/snapshotService";
 import { waitUntil } from "@vercel/functions";
-import { mockUser, getMockLogs, mockAiReflection } from "@/lib/mockData";
+import { mockUser, getMockLogs, mockAiReflection } from "@/lib/utils/mockData";
 import { 
   calculateHealthScore, 
   calculateFinanceScore, 
   calculateCareerScore, 
   calculateEarnedXP 
-} from "@/lib/scoring";
+} from "@/lib/logic/scoring";
 
 
 export async function GET(req: Request) {

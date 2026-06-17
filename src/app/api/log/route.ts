@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { getSession } from "@/lib/auth"; 
-import { connectDB } from "@/lib/mongodb"; 
+import { connectDB } from "@/lib/database/mongodb"; 
 import User from "@/models/User";
 import Log from "@/models/Log"; 
 import { 
@@ -9,12 +9,12 @@ import {
   calculateFinanceScore, 
   calculateCareerScore, 
   calculateEarnedXP 
-} from "@/lib/scoring";
+} from "@/lib/logic/scoring";
 import { IngestionSchema } from "@/lib/validators";
-import { generateAndStoreSnapshot } from "@/lib/snapshotService";
-import { recalculateStreak } from "@/lib/streak";
-import { apiHandler } from "@/lib/apiHandler";
-import { ApiError } from "@/lib/apiError";
+import { generateAndStoreSnapshot } from "@/lib/services/snapshotService";
+import { recalculateStreak } from "@/lib/logic/streak";
+import { apiHandler } from "@/lib/utils/apiHandler";
+import { ApiError } from "@/lib/utils/apiError";
 
 
 export const POST = apiHandler(async (req: Request) => {

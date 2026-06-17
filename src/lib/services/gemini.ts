@@ -119,7 +119,7 @@ export async function callGemini<T = any>(
   throw new Error(`Gemini call failed: ${lastError?.message || "Unknown error"}`);
 }
 
-import { aitwinReflectionSchema } from "../types/schemas";
+import { aitwinReflectionSchema } from "@/types/schemas";
 
 export function validateSyntraResponse(data: unknown) {
   return aitwinReflectionSchema.parse(data);

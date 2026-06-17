@@ -6,7 +6,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import useSWR from "swr";
-import { fetcher } from "@/lib/fetcher";
+import { fetcher } from "@/lib/utils/fetcher";
 import {
   Cpu, Shield, Sparkles, Briefcase, HeartPulse, Wallet,
   ArrowLeft, CheckCircle2, User, Mail, Calendar, LogOut,

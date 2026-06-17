@@ -1,6 +1,6 @@
 // src/app/api/setup/demo/route.ts
 import { NextResponse } from 'next/server';
-import { connectDB } from '@/lib/mongodb';
+import { connectDB } from '@/lib/database/mongodb';
 import User from '@/models/User';
 import Log from '@/models/Log';
 import bcrypt from "bcryptjs"; 
