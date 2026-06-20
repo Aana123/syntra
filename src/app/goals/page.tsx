@@ -9,8 +9,8 @@ import {
   HeartPulse, Wallet, Briefcase, Trash2, Target,
   CheckCircle2, ArrowLeft, Plus, Rocket, Calendar,
   Sparkles, Pencil, AlertTriangle, Flag, TrendingUp,
-  X, Activity, ChevronRight, BarChart3, Clock, Star,
-  Menu, Home, Trophy, Award, Flame, Zap, Lock,
+  X, Activity, ChevronRight, Clock, Star,
+  Menu, Trophy, Award, Flame, Lock,
   Shield, Crown, Medal, ChevronUp,
 } from "lucide-react";
 
@@ -22,7 +22,14 @@ type Goal = {
   priority: string; targetDate?: string;
   milestones?: Milestone[];
 };
-type Screen = "home" | "goals-list" | "add-goal" | "gamification";
+type DailyTask = {
+  _id?: string;
+  text: string;
+  completed: boolean;
+  date: string;
+  goalId?: string;
+};
+type Screen = "home" | "add-goal" | "gamification" | "daily-tasks";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────────────────── */
 const DC = {
@@ -43,10 +50,10 @@ const PRIO = {
 const BRAND = "#0047D4";
 
 const SCREEN_COPY: Record<Screen, { title: string; phrases: string[]; sub: string }> = {
-  "home":           { title: "Overview",        phrases: ["Goal Overview", "Track Your Progress", "Build Momentum"],                      sub: "A live snapshot of your goals, milestones, and progress." },
-  "goals-list":     { title: "My Goals",        phrases: ["My Goals", "Stay On Track", "Progress Every Day"],                             sub: "Manage and complete all your active goals." },
-  "add-goal":       { title: "Add Goal",        phrases: ["Create A Goal", "Define Your Target", "Build Your Roadmap"],                   sub: "Set a clear target, break it into steps, and start moving." },
-  "gamification":   { title: "Achievement Hub", phrases: ["Achievement Hub", "Level Up Your Life", "Track. Earn. Grow.", "Build Winning Habits"], sub: "Transform goals into achievements through streaks, XP, badges, challenges, and progress tracking." },
+  "home":         { title: "My Goals",        phrases: ["My Goals", "Stay On Track", "Progress Every Day"],                             sub: "Manage and complete all your active goals." },
+  "add-goal":     { title: "Add Goal",        phrases: ["Create A Goal", "Define Your Target", "Build Your Roadmap"],                   sub: "Set a clear target, break it into steps, and start moving." },
+  "gamification": { title: "Achievement Hub", phrases: ["Achievement Hub", "Level Up Your Life", "Track. Earn. Grow.", "Build Winning Habits"], sub: "Transform goals into achievements through streaks, XP, badges, challenges, and progress tracking." },
+  "daily-tasks":  { title: "Daily Tasks",     phrases: ["Daily Tasks", "Focus on Today", "Step by Step", "One Task at a Time"],         sub: "Manage your daily tasks to achieve milestones and long term goals." },
 };
 
 const NAV_LINKS = [
@@ -59,9 +66,6 @@ const NAV_LINKS = [
 ];
 
 /* ─── GAMIFICATION DATA ──────────────────────────────────────────── */
-const STREAK_DAYS = ["M","T","W","T","F","S","S"];
-const STREAK_DONE = [true,true,true,true,true,true,false];
-
 const ALL_BADGES = [
   { id: "Habit Builder",   icon: "⚡", label: "Habit Builder",   level: "Level 1", color: "#7c3aed" },
   { id: "Focus Master",    icon: "🎯", label: "Focus Master",    level: "Level 1", color: "#0047D4" },
@@ -148,38 +152,6 @@ function NavItem({ icon, label, sub, active, onClick, badge }: {
       {badge !== undefined && badge > 0 && <span className="nav-badge">{badge}</span>}
       <ChevronRight size={13} className="nav-arrow" />
     </button>
-  );
-}
-
-/* ─── STAT CARD ──────────────────────────────────────────────────── */
-function StatCard({ icon, iconBg, iconColor, value, suffix, label, ring }: {
-  icon: React.ReactNode; iconBg: string; iconColor: string;
-  value: string | number; suffix?: string; label: string;
-  ring?: { pct: number; color: string };
-}) {
-  return (
-    <div className="stat-card">
-      <div className="stat-card-top">
-        <div className="stat-icon" style={{ background: iconBg, color: iconColor }}>{icon}</div>
-        {ring && (
-          <div style={{ position:"relative", width:46, height:46, flexShrink:0 }}>
-            <svg width="46" height="46" style={{ transform:"rotate(-90deg)", position:"absolute", inset:0 }}>
-              <circle cx="23" cy="23" r="18" fill="none" stroke="#e8edf5" strokeWidth="4"/>
-              <circle cx="23" cy="23" r="18" fill="none" stroke={ring.color} strokeWidth="4"
-                strokeLinecap="round"
-                strokeDasharray={`${(ring.pct/100)*2*Math.PI*18} ${2*Math.PI*18}`}
-                style={{ transition:"stroke-dasharray 1.2s cubic-bezier(0.16,1,0.3,1)" }}
-              />
-            </svg>
-            <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.58rem", fontWeight:800, color:ring.color }}>
-              {ring.pct}%
-            </div>
-          </div>
-        )}
-      </div>
-      <div className="stat-value">{value}{suffix && <span className="stat-suffix">{suffix}</span>}</div>
-      <div className="stat-label">{label}</div>
-    </div>
   );
 }
 
@@ -303,7 +275,6 @@ function GamificationScreen({
   onCompleteChallenge: () => Promise<void>;
   aiChallenge: string | null;
 }) {
-  const totalMs  = goals.reduce((a, g) => a + (g.milestones?.length ?? 0), 0);
   const doneMs   = goals.reduce((a, g) => a + (g.milestones?.filter(m => m.completed).length ?? 0), 0);
 
   const xpTotal  = gamification.totalPoints;
@@ -427,7 +398,7 @@ function GamificationScreen({
         <div className="page-title-block">
           <div className="page-eyebrow">
             <div className="page-eyebrow-dot"/>
-            <span className="page-eyebrow-text">Achievement Hub</span>
+            <span className="page-eyebrow-text">XP & Rewards</span>
           </div>
           <h1 className="page-title"><Typewriter phrases={SCREEN_COPY["gamification"].phrases}/></h1>
           <p className="page-subtitle">{SCREEN_COPY["gamification"].sub}</p>
@@ -575,7 +546,7 @@ function GamificationScreen({
             </div>
           </div>
           <div className="badges-grid">
-            {ALL_BADGES.map((b, i) => {
+            {ALL_BADGES.map((b) => {
               const isUnlocked = badges.includes(b.id);
               if (isUnlocked) {
                 return (
@@ -702,17 +673,11 @@ function GamificationScreen({
         <div className="rewards-ladder">
           {rewards.map((r, i) => (
             <div key={i} className={`reward-step${r.done ? " reward-done" : ""}`}>
-              {i < rewards.length - 1 && (
-                <div 
-                  className="reward-connector" 
-                  style={{ background: r.done ? "#22c55e" : "#e2e8f0" }}
-                />
-              )}
               <div className="reward-icon-wrap" style={{
-                background: r.done ? `${r.color}18` : "#f1f5f9",
-                border: r.done ? `2px solid ${r.color}44` : "2px solid #e2e8f0",
+                background: "#fff",
+                border: r.done ? `2.5px solid ${r.color}` : "2px solid #e2e8f0",
                 color: r.done ? r.color : "#94a3b8",
-                boxShadow: r.done ? `0 4px 16px ${r.color}33` : "none",
+                boxShadow: r.done ? `0 4px 20px ${r.color}44` : "none",
               }}>
                 {r.icon}
                 {r.done && <div className="reward-check"><CheckCircle2 size={12} color="#22c55e"/></div>}
@@ -748,6 +713,19 @@ export default function GoalsPage() {
   const [milestones, setMilestones] = useState<string[]>([]);
   const [msInput, setMsInput] = useState("");
 
+  // Daily Tasks states
+  const [newTaskText, setNewTaskText] = useState("");
+  const [newTaskGoalId, setNewTaskGoalId] = useState("");
+  const [taskSuggestLoading, setTaskSuggestLoading] = useState(false);
+  const [aiTaskSuggestions, setAiTaskSuggestions] = useState<string[]>([]);
+  const [selectedAiTasks, setSelectedAiTasks] = useState<Record<string, boolean>>({});
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  // Wizard-integrated task states
+  const [pendingTasks, setPendingTasks] = useState<string[]>([]);
+  const [pendingTaskInput, setPendingTaskInput] = useState("");
+  const [toast, setToast] = useState<{msg:string;ok:boolean}|null>(null);
+  const showToast = (msg:string, ok=false) => { setToast({msg,ok}); setTimeout(()=>setToast(null), 3500); };
+
   const { data, mutate } = useSWR<any>("/api/goals", fetcher, {
     dedupingInterval: 300000, revalidateOnFocus: false, errorRetryCount: 1,
   });
@@ -755,6 +733,7 @@ export default function GoalsPage() {
     dedupingInterval: 300000, revalidateOnFocus: false, errorRetryCount: 1,
   });
   const goals: Goal[] = data?.goals || [];
+  const dailyTasks: DailyTask[] = data?.dailyTasks || [];
   const badges: string[] = data?.badges || [];
   const gamification = data?.gamification || { totalPoints: 0, currentStreak: 0, lastLogDate: null, lastChallengeDate: null };
   useEffect(() => { setMounted(true); }, []);
@@ -774,13 +753,16 @@ export default function GoalsPage() {
       });
       const d = await res.json();
       if (d.success && Array.isArray(d.suggestions)) setAiSuggestions(d.suggestions);
-    } catch {} finally { setSuggestLoading(false); }
+      else showToast(d.error || "AI suggestions unavailable. Try again.");
+    } catch { showToast("Could not reach AI. Check your connection."); } finally { setSuggestLoading(false); }
   };
 
   const resetForm = () => {
     setTitle(""); setDomain("health"); setPriority("medium"); setTargetDate("");
     setMilestones([]); setMsInput(""); setAiSuggestions([]);
     setEditId(null); setMsg(""); setSaved(false);
+    setNewTaskGoalId(""); setPendingTasks([]); setPendingTaskInput("");
+    setAiTaskSuggestions([]); setSelectedAiTasks({});
   };
 
   const startEdit = (g: Goal) => {
@@ -789,6 +771,7 @@ export default function GoalsPage() {
     setTitle(g.title); setDomain(g.domain); setPriority(g.priority === "med" ? "medium" : g.priority);
     setTargetDate(g.targetDate ? new Date(g.targetDate).toISOString().split("T")[0] : "");
     setMilestones(g.milestones?.map(m => m.text) || []);
+    setNewTaskGoalId(g._id || "");
     setScreen("add-goal");
   };
 
@@ -830,9 +813,30 @@ export default function GoalsPage() {
       });
       const d = await res.json();
       if (d.success) {
-        mutate({ goals: d.goals }, false);
+        // For new goals: save any wizard-queued tasks with the new goalId
+        if (!isEdit && pendingTasks.length > 0) {
+          const newGoalId = d.goals?.[d.goals.length - 1]?._id?.toString();
+          if (newGoalId) {
+            const todayDate = new Date().toISOString().split("T")[0];
+            await Promise.all(
+              pendingTasks.map((text: string) =>
+                fetch("/api/goals/daily-tasks", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                  body: JSON.stringify({ text, date: todayDate, goalId: newGoalId }),
+                })
+              )
+            );
+            const freshRes = await fetch("/api/goals", { credentials: "include" });
+            const freshData = await freshRes.json();
+            if (freshData.success) mutate(freshData, false);
+          }
+        } else {
+          mutate({ ...data, goals: d.goals }, false);
+        }
         setSaved(true);
-        setTimeout(() => { resetForm(); setScreen("goals-list"); }, 1800);
+        setTimeout(() => { resetForm(); setScreen("home"); }, 1800);
       } else setMsg(d.error || "Failed to save goal.");
     } catch { setMsg("Save failed. Please try again."); }
     finally { setSaving(false); }
@@ -846,7 +850,8 @@ export default function GoalsPage() {
       });
       const d = await res.json();
       if (d.success) mutate({ goals: d.goals }, false);
-    } catch {}
+      else showToast(d.error || "Could not delete goal.");
+    } catch { showToast("Could not delete goal. Check your connection."); }
   };
 
   const handleToggle = async (gid: string, mid: string, wasDone: boolean) => {
@@ -867,8 +872,8 @@ export default function GoalsPage() {
           false
         );
         if (!wasDone) { setFloatId(mid); setTimeout(() => setFloatId(null), 1400); }
-      }
-    } catch {}
+      } else { showToast(d.error || "Could not update milestone."); }
+    } catch { showToast("Could not update milestone. Check your connection."); }
   };
 
   const handleCompleteChallenge = async () => {
@@ -890,8 +895,151 @@ export default function GoalsPage() {
           false
         );
       }
-    } catch (err) {
-      console.error("Failed to complete daily challenge", err);
+    } catch {
+      showToast("Could not complete challenge. Try again.");
+    }
+  };
+
+  const handleToggleTask = async (taskId: string, wasCompleted: boolean) => {
+    try {
+      const res = await fetch("/api/goals/daily-tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ taskId, completed: !wasCompleted }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        mutate(
+          {
+            ...data,
+            dailyTasks: d.dailyTasks,
+            gamification: d.gamification || data.gamification
+          },
+          false
+        );
+      } else { showToast(d.error || "Could not update task."); }
+    } catch { showToast("Could not update task. Check your connection."); }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      const res = await fetch("/api/goals/daily-tasks", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ taskId }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        mutate({ ...data, dailyTasks: d.dailyTasks }, false);
+      } else { showToast(d.error || "Could not delete task."); }
+    } catch { showToast("Could not delete task. Check your connection."); }
+  };
+
+  const handleAddTask = async () => {
+    if (!newTaskText.trim()) return;
+    try {
+      const res = await fetch("/api/goals/daily-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          text: newTaskText.trim(),
+          date: selectedDate,
+          goalId: newTaskGoalId || undefined
+        }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        mutate(
+          {
+            ...data,
+            dailyTasks: d.dailyTasks
+          },
+          false
+        );
+        setNewTaskText("");
+      } else { showToast(d.error || "Could not add task."); }
+    } catch { showToast("Could not add task. Check your connection."); }
+  };
+
+  const handleSuggestTasks = async (goalId: string) => {
+    if (!goalId) return;
+    setTaskSuggestLoading(true);
+    setAiTaskSuggestions([]);
+    setSelectedAiTasks({});
+    try {
+      const res = await fetch("/api/goals/daily-tasks/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ goalId }),
+      });
+      const d = await res.json();
+      if (d.success && Array.isArray(d.suggestions)) {
+        setAiTaskSuggestions(d.suggestions);
+        const initialSelected: Record<string, boolean> = {};
+        d.suggestions.forEach((s: string) => { initialSelected[s] = true; });
+        setSelectedAiTasks(initialSelected);
+      } else { showToast(d.error || "AI task suggestions unavailable."); }
+    } catch { showToast("Could not reach AI. Check your connection."); }
+    finally { setTaskSuggestLoading(false); }
+  };
+
+  const handleSaveSuggestedTasks = async (goalId: string) => {
+    const tasksToSave = Object.keys(selectedAiTasks).filter(t => selectedAiTasks[t]);
+    if (tasksToSave.length === 0) return;
+    try {
+      await Promise.all(
+        tasksToSave.map(text => 
+          fetch("/api/goals/daily-tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              text,
+              date: selectedDate,
+              goalId: goalId || undefined
+            }),
+          })
+        )
+      );
+      const res = await fetch("/api/goals", { credentials: "include" });
+      const d = await res.json();
+      if (d.success) {
+        mutate(d, false);
+      }
+      setAiTaskSuggestions([]);
+      setSelectedAiTasks({});
+    } catch { showToast("Could not save tasks. Check your connection."); }
+  };
+
+  const handleAddTaskInWizard = async () => {
+    if (!pendingTaskInput.trim()) return;
+    if (editId) {
+      // Save directly to the API when editing an existing goal
+      try {
+        const res = await fetch("/api/goals/daily-tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            text: pendingTaskInput.trim(),
+            date: new Date().toISOString().split("T")[0],
+            goalId: editId,
+          }),
+        });
+        const d = await res.json();
+        if (d.success) {
+          mutate({ ...data, dailyTasks: d.dailyTasks }, false);
+          setPendingTaskInput("");
+        } else { showToast(d.error || "Could not add task."); }
+      } catch { showToast("Could not add task. Check your connection."); }
+    } else {
+      // Queue to save after new goal is created
+      setPendingTasks(prev => [...prev, pendingTaskInput.trim()]);
+      setPendingTaskInput("");
     }
   };
 
@@ -902,6 +1050,7 @@ export default function GoalsPage() {
   const totalMs  = goals.reduce((a, g) => a + (g.milestones?.length ?? 0), 0);
   const doneMs   = goals.reduce((a, g) => a + (g.milestones?.filter(m => m.completed).length ?? 0), 0);
   const overallPct = totalMs > 0 ? Math.round((doneMs / totalMs) * 100) : 0;
+  const todayStr = new Date().toISOString().split("T")[0];
 
   return (
     <div className="root">
@@ -1009,13 +1158,6 @@ export default function GoalsPage() {
         .nav-arrow { color:rgba(255,255,255,0.35);flex-shrink:0;transition:transform 0.2s,color 0.2s; }
         .nav-item:hover .nav-arrow { transform:translateX(2px);color:rgba(255,255,255,0.65); }
         .nav-item-active .nav-arrow { color:rgba(255,255,255,0.65); }
-        .lp-domains { padding:0 10px 14px;position:relative;z-index:2; }
-        .lp-domains-lbl { font-size:0.59rem;font-weight:700;color:rgba(255,255,255,0.38);text-transform:uppercase;letter-spacing:0.11em;padding:0 4px;margin-bottom:7px; }
-        .lp-domain-row { display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:10px;margin-bottom:2px;transition:background 0.17s;cursor:default; }
-        .lp-domain-row:hover { background:rgba(255,255,255,0.07); }
-        .lp-domain-icon { width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
-        .lp-domain-name { font-size:0.74rem;font-weight:600;color:rgba(255,255,255,0.8);flex:1; }
-        .lp-domain-count { font-family:"JetBrains Mono",monospace;font-size:0.67rem;font-weight:700;color:rgba(255,255,255,0.42); }
         .lp-back { padding:12px 14px;border-top:1px solid rgba(255,255,255,0.1);position:relative;z-index:2; }
         .lp-back-btn { display:inline-flex;align-items:center;gap:7px;font-size:0.74rem;font-weight:600;color:rgba(255,255,255,0.55);cursor:pointer;background:none;border:none;transition:color 0.18s;font-family:"Inter",sans-serif; }
         .lp-back-btn:hover { color:#fff; }
@@ -1049,8 +1191,6 @@ export default function GoalsPage() {
         .mob-drawer-stat-num { font-family:"DM Sans",sans-serif;font-size:1.25rem;font-weight:800;color:#fff;line-height:1; }
         .mob-drawer-stat-lbl { font-size:0.57rem;font-weight:700;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.07em;margin-top:2px; }
         .mob-drawer-nav { padding:12px 10px;display:flex;flex-direction:column;gap:4px;flex:1;overflow-y:auto;position:relative;z-index:2; }
-        .mob-drawer-domains { padding:0 10px 14px;position:relative;z-index:2; }
-        .mob-drawer-domains-lbl { font-size:0.59rem;font-weight:700;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.11em;padding:0 4px;margin-bottom:7px; }
         .mob-drawer-back { padding:12px 14px;border-top:1px solid rgba(255,255,255,0.1);position:relative;z-index:2; }
 
         /* MOBILE BOTTOM TAB BAR */
@@ -1098,15 +1238,6 @@ export default function GoalsPage() {
         .stat-suffix { font-size:1rem;color:var(--text-muted);font-weight:500;margin-left:2px; }
         .stat-label { font-size:0.69rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-top:5px; }
 
-        /* QUICK ACTIONS */
-        .qa-grid { display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:36px; }
-        .qa-card { background:var(--surface);border:1px solid rgba(0,0,0,0.07);border-radius:14px;padding:18px 20px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all 0.24s cubic-bezier(0.16,1,0.3,1);box-shadow:var(--shadow-card);text-align:left; }
-        .qa-card:hover { border-color:rgba(0,71,212,0.15);box-shadow:var(--shadow-hover);transform:translateY(-3px); }
-        .qa-icon { width:46px;height:46px;border-radius:13px;background:var(--brand-light);border:1px solid rgba(0,71,212,0.14);display:flex;align-items:center;justify-content:center;color:var(--brand);flex-shrink:0; }
-        .qa-title { font-family:"DM Sans",sans-serif;font-size:0.9rem;font-weight:800;color:var(--text-primary);margin-bottom:2px; }
-        .qa-sub { font-size:0.71rem;color:var(--text-muted);line-height:1.45; }
-        .qa-arrow { color:#CBD5E1;margin-left:auto;flex-shrink:0;transition:all 0.18s; }
-        .qa-card:hover .qa-arrow { color:var(--brand);transform:translateX(3px); }
 
         /* GOAL CARDS */
         .goals-stack { display:flex;flex-direction:column;gap:10px; }
@@ -1370,18 +1501,17 @@ export default function GoalsPage() {
         .rewards-ladder {
           display:flex;align-items:flex-start;gap:0;
           background:var(--surface);border:1px solid rgba(0,0,0,0.07);
-          border-radius:20px;padding:28px;
+          border-radius:20px;padding:32px 24px 28px;
           box-shadow:var(--shadow-card);
           margin-bottom:32px;
           position:relative;
         }
-        .reward-step { flex:1;display:flex;flex-direction:column;align-items:center;gap:10px;position:relative; }
-        .reward-connector { position:absolute;top:34px;left:50%;width:100%;height:3px;z-index:0;transition:background-color 0.3s ease; }
+        .reward-step { flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;position:relative;z-index:0; }
         .reward-icon-wrap { width:68px;height:68px;border-radius:20px;display:flex;align-items:center;justify-content:center;position:relative;z-index:1;transition:all 0.22s;cursor:default; }
         .reward-done .reward-icon-wrap { animation:scale-in 0.4s ease; }
         .reward-step:hover .reward-icon-wrap { transform:scale(1.07) translateY(-2px); }
         .reward-check { position:absolute;bottom:-5px;right:-5px;width:22px;height:22px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.12); }
-        .reward-xp { font-family:"DM Sans",sans-serif;font-size:0.78rem;font-weight:800;letter-spacing:-0.01em; }
+        .reward-xp { font-family:"DM Sans",sans-serif;font-size:0.78rem;font-weight:800;letter-spacing:-0.01em;margin-top:2px; }
         .reward-label { font-size:0.72rem;font-weight:600;text-align:center; }
 
         /* ══════════════════════════════════════════════
@@ -1398,15 +1528,16 @@ export default function GoalsPage() {
           .page-top { padding:24px 22px 20px; }
           .body-pad { padding:22px 18px calc(var(--mob-tab-h) + 22px); }
           .stats-grid { grid-template-columns:repeat(2,1fr);gap:11px; }
-          .qa-grid { grid-template-columns:1fr;gap:9px; }
           .progress-overview-bar { flex-wrap:wrap;border-radius:16px; }
           .pob-card { min-width:calc(50% - 1px);padding:16px 12px; }
           .pob-divider { display:none; }
           .gam-two-col { grid-template-columns:1fr;gap:0; }
           .badges-grid { grid-template-columns:repeat(3,1fr); }
-          .rewards-ladder { flex-direction:column;align-items:stretch;gap:16px;padding:20px; }
-          .reward-step { flex-direction:row;align-items:center;gap:16px; }
-          .reward-connector { display:none; }
+          .rewards-ladder { flex-direction:column;align-items:stretch;gap:0;padding:20px; }
+          .reward-step { flex-direction:row;align-items:center;gap:16px;padding:12px 0;border-top:1px solid var(--border); }
+          .reward-step:first-child { border-top:none;padding-top:0; }
+          .reward-step:last-child { padding-bottom:0; }
+
           .reward-icon-wrap { width:52px;height:52px;border-radius:14px;flex-shrink:0; }
         }
 
@@ -1421,7 +1552,6 @@ export default function GoalsPage() {
           .page-top { padding:20px 16px 16px;flex-direction:column;align-items:flex-start;gap:13px; }
           .body-pad { padding:18px 14px calc(var(--mob-tab-h) + 18px); }
           .stats-grid { grid-template-columns:1fr;gap:9px;margin-bottom:24px; }
-          .qa-grid { grid-template-columns:1fr;gap:9px;margin-bottom:24px; }
           .stat-card { padding:16px 16px 14px; }
           .stat-value { font-size:1.8rem; }
           .goal-card-actions { opacity:1; }
@@ -1436,7 +1566,6 @@ export default function GoalsPage() {
           .db-label { font-size:0.66rem; }
           .prio-grid { gap:7px; }
           .prio-btn { padding:10px 5px; }
-          .qa-card { padding:13px 15px;gap:11px; }
           .gpr-title { max-width:170px; }
           .ms-input-row { flex-direction:column;gap:7px; }
           .ms-add-btn { width:100%;justify-content:center; }
@@ -1475,23 +1604,10 @@ export default function GoalsPage() {
           <div className="mob-drawer-stat"><div className="mob-drawer-stat-num">{overallPct}%</div><div className="mob-drawer-stat-lbl">Overall</div></div>
         </div>
         <div className="mob-drawer-nav">
-          <NavItem icon={<BarChart3 size={15}/>} label="Overview"        sub="Summary & quick access"           active={screen==="home"}         onClick={()=>goScreen("home")}/>
-          <NavItem icon={<Rocket size={15}/>}    label="My Goals"        sub={goals.length>0?`${goals.length} active`:"No goals yet"} active={screen==="goals-list"} onClick={()=>goScreen("goals-list")} badge={goals.length}/>
+          <NavItem icon={<Rocket size={15}/>}    label="My Goals"        sub={goals.length>0?`${goals.length} active`:"No goals yet"} active={screen==="home"} onClick={()=>goScreen("home")} badge={goals.length}/>
+          <NavItem icon={<CheckCircle2 size={15}/>} label="Daily Tasks"    sub="Focus on today's execution"       active={screen==="daily-tasks"}  onClick={()=>goScreen("daily-tasks")}/>
           <NavItem icon={<Trophy size={15}/>}    label="Achievement Hub" sub="Progress • Rewards • Streaks"    active={screen==="gamification"} onClick={()=>goScreen("gamification")}/>
           <NavItem icon={<Plus size={15}/>}      label="Add New Goal"    sub="Create a goal & milestones"       active={screen==="add-goal"}     onClick={()=>{resetForm();goScreen("add-goal");}}/>
-        </div>
-        <div className="mob-drawer-domains">
-          <div className="mob-drawer-domains-lbl">By Domain</div>
-          {(["health","finance","career"] as const).map(d=>{
-            const dc=DC[d]; const count=goals.filter(g=>g.domain===d).length;
-            return (
-              <div key={d} className="lp-domain-row">
-                <div className="lp-domain-icon" style={{background:"rgba(255,255,255,0.1)",color:dc.color}}>{dc.icon}</div>
-                <span className="lp-domain-name">{dc.label}</span>
-                <span className="lp-domain-count">{count}</span>
-              </div>
-            );
-          })}
         </div>
         <div className="mob-drawer-back">
           <button className="lp-back-btn" onClick={()=>router.push("/dashboard")}>
@@ -1518,29 +1634,12 @@ export default function GoalsPage() {
             <div className="lp-stat"><div className="lp-stat-num">{overallPct}%</div><div className="lp-stat-lbl">Overall</div></div>
           </div>
           <div className="lp-nav">
-            <NavItem icon={<BarChart3 size={15}/>} label="Overview"      sub="Summary & quick access"          active={screen==="home"}         onClick={()=>setScreen("home")}/>
-            <NavItem icon={<Rocket size={15}/>}    label="My Goals"      sub={goals.length>0?`${goals.length} active`:"No goals yet"} active={screen==="goals-list"} onClick={()=>setScreen("goals-list")} badge={goals.length}/>
+            <NavItem icon={<Rocket size={15}/>}    label="My Goals"      sub={goals.length>0?`${goals.length} active`:"No goals yet"} active={screen==="home"} onClick={()=>setScreen("home")} badge={goals.length}/>
+            <NavItem icon={<CheckCircle2 size={15}/>} label="Daily Tasks"    sub="Focus on today's execution"      active={screen==="daily-tasks"}  onClick={()=>setScreen("daily-tasks")}/>
             <NavItem icon={<Trophy size={15}/>}    label="Achievement Hub" sub="Progress • Rewards • Streaks"   active={screen==="gamification"} onClick={()=>setScreen("gamification")}/>
             <NavItem icon={<Plus size={15}/>}      label="Add New Goal"  sub="Create a goal & milestones"      active={screen==="add-goal"}     onClick={()=>{resetForm();setScreen("add-goal");}}/>
           </div>
-          <div className="lp-domains">
-            <div className="lp-domains-lbl">By Domain</div>
-            {(["health","finance","career"] as const).map(d=>{
-              const dc=DC[d]; const count=goals.filter(g=>g.domain===d).length;
-              return (
-                <div key={d} className="lp-domain-row">
-                  <div className="lp-domain-icon" style={{background:"rgba(255,255,255,0.1)",color:dc.color}}>{dc.icon}</div>
-                  <span className="lp-domain-name">{dc.label}</span>
-                  <span className="lp-domain-count">{count}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="lp-back">
-            <button className="lp-back-btn" onClick={()=>router.push("/dashboard")}>
-              <ArrowLeft size={12}/> Return to Dashboard
-            </button>
-          </div>
+
         </div>
 
         {/* ══════════════════ MAIN WRAPPER ═════════════════════════════ */}
@@ -1570,116 +1669,51 @@ export default function GoalsPage() {
               />
             )}
 
-            {/* ─── OVERVIEW ─── */}
+            {/* ─── MY GOALS (merged overview + list) ─── */}
             {screen==="home" && (
               <div className="screen">
                 <div className="page-top">
                   <div className="page-title-block">
-                    <div className="page-eyebrow">
-                      <div className="page-eyebrow-dot"/>
-                      <span className="page-eyebrow-text">Achievement Hub</span>
-                    </div>
+                    <div className="page-eyebrow"><div className="page-eyebrow-dot"/><span className="page-eyebrow-text">Your Goals</span></div>
                     <h1 className="page-title"><Typewriter phrases={SCREEN_COPY["home"].phrases}/></h1>
                     <p className="page-subtitle">{SCREEN_COPY["home"].sub}</p>
                   </div>
-                  <div>
-                    <button className="btn-primary" onClick={()=>{resetForm();setScreen("add-goal");}}>
-                      <Plus size={13}/> New Goal
-                    </button>
-                  </div>
                 </div>
                 <div className="body-pad">
-                  <div className="section-hd"><span className="section-hd-label">Quick Actions</span><div className="section-hd-rule"/></div>
-                  <div className="qa-grid">
-                    <button className="qa-card" onClick={()=>{resetForm();setScreen("add-goal");}}>
-                      <div className="qa-icon"><Plus size={18}/></div>
-                      <div><div className="qa-title">Add New Goal</div><div className="qa-sub">Create a goal with AI-suggested milestones</div></div>
-                      <ChevronRight size={14} className="qa-arrow"/>
-                    </button>
-                    <button className="qa-card" onClick={()=>setScreen("goals-list")}>
-                      <div className="qa-icon"><Rocket size={18}/></div>
-                      <div><div className="qa-title">My Goals ({goals.length})</div><div className="qa-sub">Track progress, complete milestones</div></div>
-                      <ChevronRight size={14} className="qa-arrow"/>
-                    </button>
+                  {/* Compact stats strip */}
+                  <div style={{display:"flex",alignItems:"center",gap:0,background:"var(--surface)",border:"1px solid rgba(0,0,0,0.07)",borderRadius:16,overflow:"hidden",boxShadow:"var(--shadow-sm)",marginBottom:24}}>
+                    {[
+                      {icon:<Target size={15}/>, bg:"rgba(0,71,212,0.08)", color:BRAND,      value:goals.length,             denom:null,              label:"Goals"},
+                      {icon:<CheckCircle2 size={15}/>, bg:"rgba(22,163,74,0.08)", color:"#16a34a", value:doneMs, denom:`/${totalMs}`, label:"Steps Done"},
+                      {icon:<Star size={15}/>, bg:"rgba(217,119,6,0.08)",  color:"#d97706",   value:gamification.totalPoints, denom:null,              label:"XP Earned"},
+                    ].map((s,i)=>(
+                      <div key={i} style={{flex:1,display:"flex",alignItems:"center",gap:11,padding:"14px 18px",borderRight:i<2?"1px solid var(--border)":undefined}}>
+                        <div style={{width:34,height:34,borderRadius:10,background:s.bg,color:s.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{s.icon}</div>
+                        <div>
+                          <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"1.15rem",fontWeight:900,color:"var(--text-primary)",lineHeight:1}}>
+                            {s.value}{s.denom&&<span style={{fontSize:"0.72rem",fontWeight:500,color:"var(--text-muted)"}}>{s.denom}</span>}
+                          </div>
+                          <div style={{fontSize:"0.61rem",fontWeight:700,color:"var(--text-muted)",textTransform:"uppercase",letterSpacing:"0.07em",marginTop:2}}>{s.label}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {totalMs > 0 && (
+                      <div style={{flex:1.4,padding:"14px 18px",borderLeft:"1px solid var(--border)"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                          <span style={{fontSize:"0.65rem",fontWeight:600,color:"var(--text-muted)"}}>Overall Progress</span>
+                          <span style={{fontSize:"0.65rem",fontWeight:800,color:BRAND}}>{overallPct}%</span>
+                        </div>
+                        <div style={{height:5,background:"#EEF1F8",borderRadius:9999,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:`${overallPct}%`,background:`linear-gradient(90deg,${BRAND},#0066FF)`,borderRadius:9999,transition:"width 1s ease"}}/>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="section-hd"><span className="section-hd-label">Overview</span><div className="section-hd-rule"/></div>
-                  <div className="stats-grid">
-                    <StatCard icon={<Target size={16}/>} iconBg="rgba(0,71,212,0.1)" iconColor={BRAND} value={goals.length} label="Active Goals" ring={{pct:overallPct,color:BRAND}}/>
-                    <StatCard icon={<CheckCircle2 size={16}/>} iconBg="rgba(22,163,74,0.1)" iconColor="#16a34a" value={doneMs} suffix={`/${totalMs}`} label="Steps Completed"/>
-                    <StatCard icon={<Star size={16}/>} iconBg="rgba(217,119,6,0.1)" iconColor="#d97706" value={gamification.totalPoints} label="XP Earned"/>
-                  </div>
-                  <div className="section-hd"><span className="section-hd-label">Recent Goals</span><div className="section-hd-rule"/></div>
+
+                  {/* Goal list */}
                   {goals.length===0 ? (
                     <div className="empty-state">
                       <div className="empty-state-icon">🎯</div>
-                      <p style={{fontSize:"0.84rem",color:"var(--text-muted)",lineHeight:1.65}}>No goals yet. Create your first goal to get started.</p>
-                    </div>
-                  ) : (
-                    <div className="goals-stack">
-                      {goals.slice(0,4).map(g=>{
-                        const dc=DC[g.domain]; const total=g.milestones?.length??0;
-                        const done=g.milestones?.filter(m=>m.completed).length??0;
-                        const pct=total>0?Math.round((done/total)*100):0;
-                        const p=PRIO[g.priority as keyof typeof PRIO]||PRIO.medium;
-                        return (
-                          <div key={g._id} className="goal-preview-row" onClick={()=>setScreen("goals-list")}>
-                            <div className="gpr-icon" style={{background:dc.bg,color:dc.color,border:`1px solid ${dc.border}`}}>{dc.icon}</div>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div className="gpr-title">{g.title}</div>
-                              <div className="gpr-tags">
-                                <span className="tag" style={{background:p.bg,color:p.color}}>{p.emoji} {p.label}</span>
-                                <span className="tag tag-neutral">{dc.label}</span>
-                                {total>0&&<span className="tag" style={{background:"rgba(0,71,212,0.07)",color:BRAND}}>{done}/{total} steps</span>}
-                              </div>
-                            </div>
-                            {total>0&&(
-                              <div style={{position:"relative",width:36,height:36,flexShrink:0}}>
-                                <svg width="36" height="36" style={{transform:"rotate(-90deg)",position:"absolute",inset:0}}>
-                                  <circle cx="18" cy="18" r="14" fill="none" stroke="#E8EDF5" strokeWidth="3.5"/>
-                                  <circle cx="18" cy="18" r="14" fill="none" stroke={dc.color} strokeWidth="3.5" strokeLinecap="round"
-                                    strokeDasharray={`${(pct/100)*2*Math.PI*14} ${2*Math.PI*14}`}
-                                    style={{transition:"stroke-dasharray .8s ease",filter:`drop-shadow(0 0 3px ${dc.color}55)`}}/>
-                                </svg>
-                                <span style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.52rem",fontWeight:800,color:dc.color}}>{pct}%</span>
-                              </div>
-                            )}
-                            <ChevronRight size={14} className="gpr-arrow"/>
-                          </div>
-                        );
-                      })}
-                      {goals.length>4&&(
-                        <button className="view-all-btn" onClick={()=>setScreen("goals-list")}>View all {goals.length} goals →</button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ─── MY GOALS ─── */}
-            {screen==="goals-list" && (
-              <div className="screen">
-                <div className="page-top">
-                  <div className="page-title-block">
-                    <div className="page-eyebrow"><div className="page-eyebrow-dot"/><span className="page-eyebrow-text">Achievement Hub</span></div>
-                    <h1 className="page-title"><Typewriter phrases={SCREEN_COPY["goals-list"].phrases}/></h1>
-                    <p className="page-subtitle">{SCREEN_COPY["goals-list"].sub}</p>
-                  </div>
-                  <div>
-                    <button className="btn-primary" onClick={()=>{resetForm();setScreen("add-goal");}}>
-                      <Plus size={13}/> New Goal
-                    </button>
-                  </div>
-                </div>
-                <div className="body-pad">
-                  <div className="list-topbar">
-                    <span className="list-meta">
-                      <strong>{goals.length}</strong> goal{goals.length!==1?"s":""} &nbsp;·&nbsp; <strong>{doneMs}</strong>/{totalMs} steps &nbsp;·&nbsp; <strong>{overallPct}%</strong> overall
-                    </span>
-                  </div>
-                  {goals.length===0 ? (
-                    <div className="empty-state">
-                      <div className="empty-state-icon">🚀</div>
                       <div className="empty-state-title">No goals yet</div>
                       <div className="empty-state-sub">Create your first goal to start tracking progress and building momentum.</div>
                       <button className="btn-primary" onClick={()=>{resetForm();setScreen("add-goal");}}>
@@ -1702,20 +1736,20 @@ export default function GoalsPage() {
               <div className="screen">
                 <div className="page-top">
                   <div className="page-title-block">
-                    <div className="page-eyebrow"><div className="page-eyebrow-dot"/><span className="page-eyebrow-text">Achievement Hub</span></div>
+                    <div className="page-eyebrow"><div className="page-eyebrow-dot"/><span className="page-eyebrow-text">{editId ? "Edit Goal" : "Goal Builder"}</span></div>
                     <h1 className="page-title">
                       {editId ? "Edit Goal" : <Typewriter phrases={SCREEN_COPY["add-goal"].phrases}/>}
                     </h1>
-                    <p className="page-subtitle">{editId ? "Update your goal details below." : SCREEN_COPY["add-goal"].sub}</p>
+                    <p className="page-subtitle">{editId ? "Update your goal, milestones, and today's tasks." : SCREEN_COPY["add-goal"].sub}</p>
                   </div>
-                  {editId && <div><button className="eb-cancel" onClick={()=>{resetForm();setScreen("goals-list");}}>Cancel Edit</button></div>}
+                  {editId && <div><button className="eb-cancel" onClick={()=>{resetForm();setScreen("home");}}>Cancel Edit</button></div>}
                 </div>
                 <div className="body-pad">
                   <div className="form-wrap">
                     {editId && (
                       <div className="edit-banner">
                         <div className="eb-label"><Pencil size={12}/> Editing an existing goal</div>
-                        <button className="eb-cancel" onClick={()=>{resetForm();setScreen("goals-list");}}>Cancel</button>
+                        <button className="eb-cancel" onClick={()=>{resetForm();setScreen("home");}}>Cancel</button>
                       </div>
                     )}
                     {saved ? (
@@ -1865,6 +1899,128 @@ export default function GoalsPage() {
                             )}
                           </div>
                         </div>
+                        {/* TODAY'S TASKS CARD */}
+                        <div className="form-card">
+                          <div className="form-card-stripe" style={{background:"linear-gradient(90deg,#16a34a,#22c55e)"}}/>
+                          <div className="form-card-head">
+                            <div className="fch-icon" style={{background:"rgba(22,163,74,0.08)",color:"#16a34a"}}><Activity size={19}/></div>
+                            <div>
+                              <div className="fch-title">Today's Tasks</div>
+                              <div className="fch-sub">
+                                {editId
+                                  ? "Manage daily tasks linked to this goal"
+                                  : "Queue tasks to add once the goal is saved"}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="form-card-body">
+                            {/* Edit mode: show today's existing tasks */}
+                            {editId && (() => {
+                              const linked = dailyTasks.filter((t: DailyTask) =>
+                                t.goalId === editId && t.date?.split("T")[0] === todayStr
+                              );
+                              return linked.length > 0 ? (
+                                <div>
+                                  <p style={{fontSize:"0.67rem",fontWeight:700,color:"var(--text-muted)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
+                                    <CheckCircle2 size={10} style={{color:"#16a34a"}}/>
+                                    {linked.filter((t: DailyTask) => t.completed).length}/{linked.length} done today
+                                  </p>
+                                  <div className="ms-list" style={{marginBottom:12}}>
+                                    {linked.map((t: DailyTask) => (
+                                      <div key={t._id} className="ms-item"
+                                        style={{borderColor: t.completed ? "#bbf7d0" : undefined, background: t.completed ? "#f0fdf4" : undefined}}>
+                                        <div
+                                          className={`ms-checkbox${t.completed ? " ms-checkbox-done" : ""}`}
+                                          style={t.completed ? {background:"#16a34a",borderColor:"#16a34a"} : {}}
+                                          onClick={() => t._id && handleToggleTask(t._id, t.completed)}
+                                        >
+                                          {t.completed && <CheckCircle2 size={10} color="#fff"/>}
+                                        </div>
+                                        <span className={`ms-text${t.completed ? " ms-check-done" : ""}`}>{t.text}</span>
+                                        <button className="ms-del" onClick={() => t._id && handleDeleteTask(t._id)}><X size={12}/></button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null;
+                            })()}
+
+                            {/* Quick-add input */}
+                            <div className="ms-input-row">
+                              <input className="field-input" style={{flex:1}} type="text"
+                                placeholder={editId ? "Add a task for today linked to this goal…" : "Queue a task for after saving…"}
+                                value={pendingTaskInput}
+                                onChange={e => setPendingTaskInput(e.target.value)}
+                                onKeyDown={e => e.key === "Enter" && handleAddTaskInWizard()}
+                              />
+                              <button className="ms-add-btn" onClick={handleAddTaskInWizard}><Plus size={12}/> Add</button>
+                            </div>
+
+                            {/* AI suggest (edit mode only — needs a real goalId) */}
+                            {editId && (
+                              <div style={{marginTop:4}}>
+                                <div className="ai-row">
+                                  <label className="field-label" style={{margin:0}}>AI Suggestions</label>
+                                  <button className="ai-btn" onClick={() => handleSuggestTasks(editId)} disabled={taskSuggestLoading}>
+                                    <Sparkles size={10}/> {taskSuggestLoading ? "Thinking…" : aiTaskSuggestions.length ? "Regenerate" : "Suggest tasks"}
+                                  </button>
+                                </div>
+                                {aiTaskSuggestions.length > 0 && (
+                                  <div style={{marginTop:10}}>
+                                    <p style={{fontSize:"0.65rem",fontWeight:700,color:"#16a34a",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7,display:"flex",alignItems:"center",gap:4}}>
+                                      <Sparkles size={9}/> Tap to select · saves for today
+                                    </p>
+                                    <div className="ai-chips">
+                                      {aiTaskSuggestions.map((s, i) => (
+                                        <div key={i}
+                                          className={`ai-chip${selectedAiTasks[s] ? " on" : ""}`}
+                                          style={selectedAiTasks[s] ? {borderColor:"#16a34a",background:"rgba(22,163,74,0.06)",color:"#16a34a"} : {}}
+                                          onClick={() => setSelectedAiTasks(prev => ({...prev, [s]: !prev[s]}))}
+                                        >
+                                          {selectedAiTasks[s] ? <CheckCircle2 size={9}/> : <Plus size={9}/>} {s}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    {Object.values(selectedAiTasks).some(Boolean) && (
+                                      <button
+                                        className="ms-add-btn"
+                                        style={{marginTop:10,width:"100%",justifyContent:"center",background:"#16a34a",borderColor:"#16a34a",color:"#fff"}}
+                                        onClick={() => handleSaveSuggestedTasks(editId)}
+                                      >
+                                        <CheckCircle2 size={12}/> Save Selected Tasks
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Pending tasks list (new goal mode) */}
+                            {!editId && pendingTasks.length > 0 && (
+                              <div style={{marginTop:4}}>
+                                <p style={{fontSize:"0.67rem",fontWeight:700,color:"var(--text-muted)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7,display:"flex",alignItems:"center",gap:5}}>
+                                  <CheckCircle2 size={10} style={{color:"#16a34a"}}/> {pendingTasks.length} task{pendingTasks.length!==1?"s":""} queued
+                                </p>
+                                <div className="ms-list">
+                                  {pendingTasks.map((t, i) => (
+                                    <div key={i} className="ms-item">
+                                      <div className="ms-num">{i+1}</div>
+                                      <span className="ms-text">{t}</span>
+                                      <button className="ms-del" onClick={() => setPendingTasks(prev => prev.filter((_, idx) => idx !== i))}><X size={12}/></button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {!editId && pendingTasks.length === 0 && (
+                              <p style={{textAlign:"center",padding:"8px 0",color:"var(--text-muted)",fontSize:"0.79rem"}}>
+                                ✅ Tasks you add here will be linked to this goal and saved for today.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
                         <div>
                           <button className="save-btn" onClick={handleSave} disabled={saving||!title.trim()}>
                             {saving
@@ -1880,6 +2036,219 @@ export default function GoalsPage() {
               </div>
             )}
 
+            {/* ─── DAILY TASKS ─── */}
+            {screen === "daily-tasks" && (
+              <div className="screen animate-in">
+                <div className="page-top">
+                  <div className="page-title-block">
+                    <div className="page-eyebrow">
+                      <div className="page-eyebrow-dot" />
+                      <span className="page-eyebrow-text">Goal Execution</span>
+                    </div>
+                    <h1 className="page-title">
+                      <Typewriter phrases={SCREEN_COPY["daily-tasks"].phrases} />
+                    </h1>
+                    <p className="page-subtitle">{SCREEN_COPY["daily-tasks"].sub}</p>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <input 
+                      type="date" 
+                      className="field-input" 
+                      style={{ width: 160, padding: "8px 12px", height: "fit-content" }}
+                      value={selectedDate}
+                      onChange={e => setSelectedDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="body-pad" style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 28 }}>
+                  {/* LEFT COLUMN: TASK LIST */}
+                  <div>
+                    <div className="section-hd">
+                      <span className="section-hd-label">Tasks for {selectedDate === new Date().toISOString().split("T")[0] ? "Today" : selectedDate}</span>
+                      <div className="section-hd-rule" />
+                    </div>
+
+                    {dailyTasks.filter(t => t.date === selectedDate).length === 0 ? (
+                      <div className="empty-state" style={{ padding: "64px 32px" }}>
+                        <div className="empty-state-icon">📋</div>
+                        <div className="empty-state-title">No tasks for this day</div>
+                        <p className="empty-state-sub">Use the sidebar panels to add tasks manually or generate them with AI.</p>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+                        {dailyTasks.filter(t => t.date === selectedDate).map(t => {
+                          const linkedGoal = goals.find(g => g._id === t.goalId);
+                          const dc = linkedGoal ? DC[linkedGoal.domain] : null;
+
+                          return (
+                            <div 
+                              key={t._id} 
+                              className="goal-preview-row" 
+                              style={{ 
+                                cursor: "default", 
+                                borderLeft: dc ? `4px solid ${dc.color}` : "1px solid rgba(0,0,0,0.07)",
+                                padding: "12px 16px" 
+                              }}
+                            >
+                              <div
+                                className={`ms-checkbox ${t.completed ? "ms-checkbox-done" : ""}`}
+                                style={t.completed && dc ? { background: dc.color, borderColor: dc.color } : t.completed ? { background: BRAND, borderColor: BRAND } : {}}
+                                onClick={() => t._id && handleToggleTask(t._id, t.completed)}
+                              >
+                                {t.completed && <CheckCircle2 size={10} color="#fff" />}
+                              </div>
+                              
+                              <div style={{ flex: 1, minWidth: 0, paddingLeft: 6 }}>
+                                <span 
+                                  className={`ms-text ${t.completed ? "ms-check-done" : ""}`} 
+                                  style={{ fontSize: "0.85rem", fontWeight: 600, color: t.completed ? "var(--text-muted)" : "var(--text-primary)" }}
+                                >
+                                  {t.text}
+                                </span>
+                                {linkedGoal && (
+                                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                                    <span className="tag tag-neutral" style={{ fontSize: "0.6rem", padding: "1px 6px" }}>
+                                      {linkedGoal.title}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <button 
+                                className="gc-btn gc-btn-del" 
+                                style={{ opacity: 1 }}
+                                onClick={() => t._id && handleDeleteTask(t._id)}
+                                title="Delete Task"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* RIGHT COLUMN: CONTROLS */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                    {/* ADD MANUAL TASK */}
+                    <div className="form-card">
+                      <div className="form-card-stripe" style={{ background: "linear-gradient(90deg, #0047D4, #0066FF)" }} />
+                      <div className="form-card-head">
+                        <div className="fch-icon" style={{ background: "rgba(0,71,212,0.08)", color: BRAND }}><Plus size={16} /></div>
+                        <div>
+                          <div className="fch-title">Add Daily Task</div>
+                          <div className="fch-sub">Create a task manually</div>
+                        </div>
+                      </div>
+                      <div className="form-card-body" style={{ padding: 18 }}>
+                        <div className="field-grp">
+                          <label className="field-label">Task description</label>
+                          <input 
+                            type="text" 
+                            className="field-input" 
+                            placeholder="e.g. Read 5 pages, Review budget"
+                            value={newTaskText}
+                            onChange={e => setNewTaskText(e.target.value)}
+                            onKeyDown={e => e.key === "Enter" && handleAddTask()}
+                          />
+                        </div>
+                        <div className="field-grp">
+                          <label className="field-label">Link to Goal (Optional)</label>
+                          <select 
+                            className="field-input" 
+                            value={newTaskGoalId}
+                            onChange={e => setNewTaskGoalId(e.target.value)}
+                          >
+                            <option value="">-- No Link --</option>
+                            {goals.map(g => (
+                              <option key={g._id} value={g._id}>{g.title}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <button 
+                          className="save-btn" 
+                          style={{ padding: 10, fontSize: "0.8rem", borderRadius: 10 }}
+                          onClick={handleAddTask}
+                          disabled={!newTaskText.trim()}
+                        >
+                          Add Task
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* AI SUGGESTION WIZARD */}
+                    {goals.length > 0 && (
+                      <div className="form-card">
+                        <div className="form-card-stripe" style={{ background: "linear-gradient(90deg, #7c3aed, #9f6ef5)" }} />
+                        <div className="form-card-head">
+                          <div className="fch-icon" style={{ background: "rgba(124,58,237,0.08)", color: "#7c3aed" }}><Sparkles size={16} /></div>
+                          <div>
+                            <div className="fch-title">AI Suggest Daily Tasks</div>
+                            <div className="fch-sub">Break down your goals automatically</div>
+                          </div>
+                        </div>
+                        <div className="form-card-body" style={{ padding: 18 }}>
+                          <div className="field-grp">
+                            <label className="field-label">Select Goal to Target</label>
+                            <select 
+                              className="field-input"
+                              value={newTaskGoalId}
+                              onChange={e => {
+                                setNewTaskGoalId(e.target.value);
+                                setAiTaskSuggestions([]);
+                              }}
+                            >
+                              <option value="">-- Select Goal --</option>
+                              {goals.map(g => (
+                                <option key={g._id} value={g._id}>{g.title}</option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          <button 
+                            className="ai-btn" 
+                            style={{ width: "100%", justifyContent: "center", borderRadius: 10, padding: 10 }}
+                            onClick={() => handleSuggestTasks(newTaskGoalId)}
+                            disabled={!newTaskGoalId || taskSuggestLoading}
+                          >
+                            {taskSuggestLoading ? "Thinking..." : "Generate AI Tasks"}
+                          </button>
+
+                          {aiTaskSuggestions.length > 0 && (
+                            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                              <p style={{ fontSize: "0.68rem", fontWeight: 700, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.05em" }}>Suggested Tasks</p>
+                              {aiTaskSuggestions.map((s, idx) => (
+                                <div key={idx} className="ms-check-row" style={{ background: "#f8fafc", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+                                  <div
+                                    className={`ms-checkbox ${selectedAiTasks[s] ? "ms-checkbox-done" : ""}`}
+                                    style={selectedAiTasks[s] ? { background: "#7c3aed", borderColor: "#7c3aed" } : {}}
+                                    onClick={() => setSelectedAiTasks(prev => ({ ...prev, [s]: !prev[s] }))}
+                                  >
+                                    {selectedAiTasks[s] && <CheckCircle2 size={10} color="#fff" />}
+                                  </div>
+                                  <span style={{ fontSize: "0.78rem", fontWeight: 500, paddingLeft: 6, color: "var(--text-primary)" }}>{s}</span>
+                                </div>
+                              ))}
+                              
+                              <button 
+                                className="save-btn" 
+                                style={{ padding: 10, fontSize: "0.8rem", borderRadius: 10, marginTop: 4, background: "linear-gradient(135deg,#7c3aed,#9f6ef5)" }}
+                                onClick={() => handleSaveSuggestedTasks(newTaskGoalId)}
+                              >
+                                Save Generated Tasks
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>{/* content-shell */}
         </div>{/* main-wrapper */}
       </div>{/* page-body */}
@@ -1887,10 +2256,6 @@ export default function GoalsPage() {
       <nav className="mob-tabbar">
         <div className="mob-tabbar-inner">
           <button className={`mob-tab${screen==="home" ? " active" : ""}`} onClick={()=>setScreen("home")}>
-            <div className="mob-tab-icon"><Home size={19}/></div>
-            <span className="mob-tab-label">Overview</span>
-          </button>
-          <button className={`mob-tab${screen==="goals-list" ? " active" : ""}`} onClick={()=>setScreen("goals-list")}>
             <div className="mob-tab-icon"><Rocket size={19}/></div>
             <span className="mob-tab-label">My Goals</span>
             {goals.length > 0 && <span className="mob-tab-badge">{goals.length > 9 ? "9+" : goals.length}</span>}
@@ -1906,6 +2271,22 @@ export default function GoalsPage() {
         </div>
       </nav>
 
+      {toast && (
+        <div style={{
+          position:"fixed", bottom:24, right:24, zIndex:9999,
+          background:toast.ok?"#f0fdf4":"#fef2f2",
+          border:`1px solid ${toast.ok?"#bbf7d0":"#fecaca"}`,
+          color:toast.ok?"#15803d":"#b91c1c",
+          padding:"11px 18px", borderRadius:12,
+          fontSize:"0.82rem", fontWeight:600,
+          boxShadow:"0 4px 20px rgba(0,0,0,0.12)",
+          display:"flex", alignItems:"center", gap:10,
+          fontFamily:"'Inter',sans-serif", maxWidth:320,
+        }}>
+          <span>{toast.ok?"✓":"⚠"}</span>
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }

@@ -1880,7 +1880,7 @@ function IngestionPage() {
                                 onClick={() => {
                                   const age = parseInt(dependentAge);
                                   if (isNaN(age) || age < 0 || age > 120) {
-                                    alert("Please enter a valid age between 0 and 120.");
+                                    setRelationsMsg({ text: "Please enter a valid age between 0 and 120.", ok: false });
                                     return;
                                   }
                                   setRelations(p => ({
@@ -1989,7 +1989,7 @@ function IngestionPage() {
                                   style={{ padding: "6px 14px", fontSize: "0.78rem", background: "linear-gradient(135deg,#ec4899,#f43f5e)", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}
                                   onClick={() => {
                                     if (!supportName.trim()) {
-                                      alert("Please enter a contact name.");
+                                      setRelationsMsg({ text: "Please enter a contact name.", ok: false });
                                       return;
                                     }
                                     const relationship = supportRelationship.trim() || "Friend";

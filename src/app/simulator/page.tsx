@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Activity,
-  AlertTriangle,
   ArrowUpRight,
   Briefcase,
   CheckCircle2,
@@ -13,20 +12,14 @@ import {
   Loader2,
   ShieldAlert,
   Sparkles,
-  Target,
   TrendingUp,
   Wallet,
   BrainCircuit,
   Zap,
   Cpu,
-  ArrowLeft,
   BarChart3,
-  FlaskConical,
   SlidersHorizontal,
-  Clock,
-  ChevronRight,
   TrendingDown,
-  BookOpen,
   Play,
 } from "lucide-react";
 import {
@@ -393,7 +386,6 @@ function SimulatorPage() {
   }, [pctChange, result, userGoals, domain]);
 
   const presets = useMemo(() => {
-    const sleepBaseline = baselines?.sleep_hours || 7.5;
     const workoutBaseline = baselines?.workout_frequency || 3;
     const studyBaseline = baselines?.study_hours || 4;
     const focusBaseline = baselines?.focus_rating || 7;
@@ -551,7 +543,6 @@ function SimulatorPage() {
 
   if (!mounted) return null;
 
-  const dc = DOMAIN_COPY[domain];
   const isPositive = pctChange >= 0;
   const hudColor = pctChange === 0 ? BRAND : isPositive ? "#16a34a" : "#dc2626";
   const hudBg    = pctChange === 0 ? "rgba(0,71,212,0.05)"   : isPositive ? "rgba(22,163,74,0.05)"   : "rgba(220,38,38,0.05)";
@@ -878,17 +869,22 @@ function SimulatorPage() {
         @media (max-width: 1060px) { .results-grid { grid-template-columns: 1fr; } }
 
         /* trade-off cards */
-        .tradeoff-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-top: 8px; }
+        .tradeoff-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 8px; }
         .tradeoff-card {
           border-radius: var(--r-lg); padding: 18px;
           border: 1px solid var(--border);
           transition: all 0.22s cubic-bezier(0.16,1,0.3,1);
+          display: flex; flex-direction: column;
         }
         .tradeoff-card:hover { transform: translateY(-3px); box-shadow: var(--sh-md); }
-        .tradeoff-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .tradeoff-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .tradeoff-domain { font-size: 0.63rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 9px; border-radius: 6px; }
-        .tradeoff-num { font-family: "DM Sans", sans-serif; font-size: 2rem; font-weight: 900; line-height: 1; margin-bottom: 8px; }
-        .tradeoff-desc { font-size: 0.8rem; color: var(--txt-secondary); line-height: 1.6; font-weight: 500; }
+        .tradeoff-score { display: flex; align-items: baseline; gap: 3px; margin-bottom: 3px; }
+        .tradeoff-num { font-family: "DM Sans", sans-serif; font-size: 2.2rem; font-weight: 900; line-height: 1; }
+        .tradeoff-pts { font-size: 0.7rem; font-weight: 700; color: var(--txt-muted); padding-bottom: 3px; }
+        .tradeoff-impact-label { font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
+        .tradeoff-desc { font-size: 0.79rem; color: var(--txt-secondary); line-height: 1.6; font-weight: 500; flex: 1; }
+        @media (max-width: 768px) { .tradeoff-grid { grid-template-columns: 1fr; } }
 
         /* timeline */
         .timeline { display: flex; flex-direction: column; gap: 14px; position: relative; padding-left: 22px; margin-left: 8px; margin-top: 4px; border-left: 2px dashed rgba(0,71,212,0.18); }
@@ -1522,19 +1518,27 @@ function SimulatorPage() {
                 <div className="tradeoff-grid">
                   {(result.aiAnalysis?.tradeOffs || []).map((item, i) => {
                     const ddc = DOMAIN_COPY[item.domain];
+                    const isPos = item.impact === "positive";
+                    const isNeg = item.impact === "negative";
+                    const signColor = isPos ? "#16a34a" : isNeg ? "#dc2626" : "#6366f1";
+                    const signChar = isPos ? "+" : isNeg ? "−" : "~";
+                    const dirLabel = isPos ? "Score goes up" : isNeg ? "Score goes down" : "Minimal effect";
                     return (
                       <div key={i} className="tradeoff-card" style={{ background: ddc.bg, borderColor: ddc.border }}>
                         <div className="tradeoff-header">
                           <span className="tradeoff-domain" style={{ color: ddc.color, background: `${ddc.color}15` }}>{ddc.label}</span>
-                          {item.impact === "positive"
-                            ? <ArrowUpRight size={14} style={{ color: "#16a34a" }}/>
-                            : item.impact === "negative"
-                            ? <TrendingDown size={14} style={{ color: "#dc2626" }}/>
-                            : <Sparkles size={14} style={{ color: "var(--brand)" }}/>}
+                          <span style={{ display:"flex", alignItems:"center", gap:3, fontSize:"0.65rem", fontWeight:800, color: signColor }}>
+                            {isPos ? <ArrowUpRight size={11}/> : isNeg ? <TrendingDown size={11}/> : <Sparkles size={11}/>}
+                            {isPos ? "Improves" : isNeg ? "Drops" : "Neutral"}
+                          </span>
                         </div>
-                        <div className="tradeoff-num" style={{ color: ddc.color }}>
-                          <AnimatedNumber value={item.magnitude || 0}/>
+                        <div className="tradeoff-score">
+                          <span className="tradeoff-num" style={{ color: signColor }}>
+                            {signChar}<AnimatedNumber value={item.magnitude || 0}/>
+                          </span>
+                          <span className="tradeoff-pts">pts</span>
                         </div>
+                        <div className="tradeoff-impact-label" style={{ color: signColor }}>{dirLabel}</div>
                         <p className="tradeoff-desc">{item.explanation}</p>
                       </div>
                     );
@@ -1544,7 +1548,7 @@ function SimulatorPage() {
                 {/* timeline */}
                 <div style={{ marginTop: 32, paddingTop: 28, borderTop: "1px solid var(--border)" }}>
                   <div className="sec-label">
-                    <span className="sec-label-text">Month-by-Month Roadmap</span>
+                    <span className="sec-label-text">Week-by-Week Analysis</span>
                     <div className="sec-label-rule"/>
                   </div>
                   <div className="timeline">

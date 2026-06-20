@@ -5,8 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight, Wallet, HeartPulse, Briefcase,
   Activity, BrainCircuit, Clock, ChevronRight,
-  RefreshCw, TrendingUp, Zap, Target, Sparkles,
-  CheckCircle2, Flame, Trophy, Lock, ChevronDown, ChevronUp, Star,
+  RefreshCw, Target,
+  CheckCircle2, ChevronDown, ChevronUp,
 } from "lucide-react";
 import {
   getAverageHealthMetrics,
@@ -28,6 +28,7 @@ type DashboardData = {
   gamification?: { totalPoints?: number; currentStreak?: number; badges?: string[] };
   goals?: GoalType[];
   timeline?: LogType[];
+  dailyTasks?: any[];
 };
 
 const DC = {
@@ -42,17 +43,6 @@ const PRIO = {
   low:    { color: "#16a34a", bg: "rgba(22,163,74,0.07)",   label: "Low",    emoji: "🌿" },
 } as any;
 
-const ALL_BADGES = [
-  { id: "Habit Builder",   icon: "⚡", label: "Habit Builder",   level: "Level 1", color: "#7c3aed" },
-  { id: "Focus Master",    icon: "🎯", label: "Focus Master",    level: "Level 1", color: "#0047D4" },
-  { id: "Goal Getter",     icon: "⭐", label: "Goal Getter",     level: "Level 1", color: "#d97706" },
-  { id: "Rising Twin",     icon: "🔥", label: "Rising Twin",     level: "Level 1", color: "#dc2626" },
-  { id: "Week Warrior",    icon: "📅", label: "Week Warrior",    level: "Level 1", color: "#16a34a" },
-  { id: "Month Master",    icon: "👑", label: "Month Master",    level: "Level 1", color: "#7c3aed" },
-  { id: "Savings Streak",  icon: "💰", label: "Savings Streak",  level: "Level 1", color: "#0284c7" },
-  { id: "Learning Machine",icon: "🧠", label: "Learning Machine",level: "Level 1", color: "#6d28d9" },
-];
-
 /* ─── TYPEWRITER ─────────────────────────────────────────────────── */
 function TypewriterGreeting({ name }: { name: string }) {
   const [greeting, setGreeting] = useState("");
@@ -62,10 +52,9 @@ function TypewriterGreeting({ name }: { name: string }) {
 
   useEffect(() => {
     const hour = new Date().getHours();
-    let timeText = "Good Night";
+    let timeText = "Good Evening";
     if (hour >= 5 && hour < 12) timeText = "Good Morning";
     else if (hour >= 12 && hour < 17) timeText = "Good Afternoon";
-    else if (hour >= 17 && hour < 21) timeText = "Good Evening";
     const phrases = [`${timeText}, ${name || "User"}`, "Tracking your growth in real time"];
     const current = phrases[phase];
     let i = 0;
@@ -174,7 +163,15 @@ export default function DashboardPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [floatId, setFloatId] = useState<string | null>(null);
+  const [taskFloatId, setTaskFloatId] = useState<string | null>(null);
   const [expandedGoals, setExpandedGoals] = useState<Record<string, boolean>>({});
+  const [projectionRange, setProjectionRange] = useState<"1W" | "2W" | "1M" | "3M" | "6M">("1M");
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [showRangeDropdown, setShowRangeDropdown] = useState(false);
+  const rangeDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [toast, setToast] = useState<{msg:string;ok:boolean}|null>(null);
+  const showToast = (msg:string, ok=false) => { setToast({msg,ok}); setTimeout(()=>setToast(null), 3500); };
+
   const handleToggleMilestone = async (gid: string, mid: string, wasDone: boolean) => {
     try {
       const res = await fetch("/api/goals/milestone", {
@@ -202,9 +199,45 @@ export default function DashboardPage() {
           setFloatId(mid);
           setTimeout(() => setFloatId(null), 1400);
         }
+      } else {
+        showToast(d.error || "Could not update milestone.");
       }
-    } catch (err) {
-      console.error("Failed to toggle milestone", err);
+    } catch {
+      showToast("Could not update milestone. Check your connection.");
+    }
+  };
+
+  const handleToggleTask = async (taskId: string, wasDone: boolean) => {
+    try {
+      const res = await fetch("/api/goals/daily-tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ taskId, completed: !wasDone }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        setData(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            dailyTasks: d.dailyTasks,
+            gamification: {
+              ...prev.gamification,
+              totalPoints: d.gamification?.totalPoints ?? prev.gamification?.totalPoints,
+              currentStreak: d.gamification?.currentStreak ?? prev.gamification?.currentStreak,
+            }
+          };
+        });
+        if (!wasDone) {
+          setTaskFloatId(taskId);
+          setTimeout(() => setTaskFloatId(null), 1400);
+        }
+      } else {
+        showToast(d.error || "Could not update task.");
+      }
+    } catch {
+      showToast("Could not update task. Check your connection.");
     }
   };
 
@@ -254,12 +287,21 @@ export default function DashboardPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  useEffect(() => {
+    if (!showRangeDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (rangeDropdownRef.current && !rangeDropdownRef.current.contains(e.target as Node)) {
+        setShowRangeDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showRangeDropdown]);
+
   if (loading || !data) return <TerminalLoading />;
 
   /* derived values */
   const name = data.user?.name || "User";
-  const rawMission = data.user?.personalMission || "Achieve Personal Optimization";
-  const mission = rawMission.replace(/^["']|["']$/g, "");
   const healthScore = data.scorecards?.health ?? 72;
   const financeScore = data.scorecards?.finance ?? 82;
   const careerScore = data.scorecards?.career ?? 88;
@@ -268,25 +310,8 @@ export default function DashboardPage() {
   const totalPoints = data.gamification?.totalPoints ?? 0;
   const logs = data.timeline || [];
   const goals = data.goals || [];
-  const badges = data.gamification?.badges || [];
+  const dailyTasks = data.dailyTasks || [];
 
-  // Streak Week generator
-  const daysOfWeek = ["Su", "M", "T", "W", "Th", "F", "S"];
-  const today = new Date();
-  
-  const streakWeek = Array.from({ length: 7 }).map((_, i) => {
-    const d = new Date();
-    d.setDate(today.getDate() - (6 - i));
-    const dayLabel = daysOfWeek[d.getDay()];
-    // Color dots for recent days based on currentStreak (streak variable)
-    const isCompleted = (6 - i) < streak;
-    const isToday = i === 6;
-    return {
-      label: dayLabel,
-      done: isCompleted,
-      current: isToday
-    };
-  });
 
   const chronoAge = data.user?.age || 25.0;
   const avgHealthMetrics = getAverageHealthMetrics(logs);
@@ -307,13 +332,6 @@ export default function DashboardPage() {
   const currentMonthlySavings = profileSavings || logsSavings || 10000;
 
 
-  const activeGoal = data.goals?.[0] ?? null;
-  let daysRemaining = 412;
-  if (activeGoal?.targetDate) {
-    const diff = new Date(activeGoal.targetDate).getTime() - Date.now();
-    if (diff > 0) daysRemaining = Math.ceil(diff / 86400000);
-  }
-
   const scores = [
     { label: "Health",    value: healthScore,  icon: <HeartPulse size={16} />,  suffix: undefined, formula: "Sleep Quality + Physical Activity + Emotional Stability + Energy Consistency + Nutrition Balance − Stress Load" },
     { label: "Finance",   value: financeScore,  icon: <Wallet size={16} />,      suffix: undefined, formula: "Savings Consistency + Budget Adherence + Investment Discipline + Income Stability − Financial Risk" },
@@ -324,7 +342,6 @@ export default function DashboardPage() {
   ];
 
   // Dynamic Trajectory & 12-Month Projections
-  const targetSleep = profile?.averageSleep || 8.0;
   const targetSavingsRate = profile?.targetSavingsRate || 20;
   const monthlyIncome = profile?.monthlyIncome || 50000;
   const targetMonthlySavings = monthlyIncome * (targetSavingsRate / 100) || 10000;
@@ -340,11 +357,8 @@ export default function DashboardPage() {
     : Number((currentStudy + (targetStudy - currentStudy) * (twinSync / 100)).toFixed(1));
 
   const projectedHealthScore = Math.round(healthScore + (95 - healthScore) * (twinSync / 100));
-  const projectedFinanceScore = Math.round(financeScore + (95 - financeScore) * (twinSync / 100));
-  const projectedCareerScore = Math.round(careerScore + (98 - careerScore) * (twinSync / 100));
 
-  const projectedCoreScore = Math.round((projectedHealthScore + projectedFinanceScore + projectedCareerScore) / 3);
-  const deltaScore = projectedCoreScore - twinSync;
+  const projectedCareerScore = Math.round(careerScore + (98 - careerScore) * (twinSync / 100));
 
   const cvfMetrics = [
     { label: "Daily Sleep",      now: `${currentSleep}h`,                           future: `${projectedSleep}h`,      nowPct: Math.min(100, Math.round((currentSleep/9)*100)),    futurePct: Math.min(100, Math.round((projectedSleep/9)*100)), warn: currentSleep < 6.5 },
@@ -354,8 +368,149 @@ export default function DashboardPage() {
     { label: "Career Score",     now: `${careerScore}`,                             future: `${projectedCareerScore}`,        nowPct: careerScore,  futurePct: projectedCareerScore, warn: careerScore < 60 },
   ];
 
-  /* overall progress % across all metrics */
-  const overallProgress = Math.round(cvfMetrics.reduce((a, m) => a + m.nowPct, 0) / cvfMetrics.length);
+  // Interactive trajectory chart — range-aware data generation
+  const RANGE_OPTIONS = [
+    { value: "1W" as const,  label: "1 Week",   groupBy: "day"   as const, count: 7  },
+    { value: "2W" as const,  label: "2 Weeks",  groupBy: "day"   as const, count: 14 },
+    { value: "1M" as const,  label: "1 Month",  groupBy: "day"   as const, count: 30 },
+    { value: "3M" as const,  label: "3 Months", groupBy: "week"  as const, count: 13 },
+    { value: "6M" as const,  label: "6 Months", groupBy: "month" as const, count: 6  },
+  ];
+
+  const tasksByDate: Record<string, { total: number; done: number }> = {};
+  dailyTasks.forEach((t: any) => {
+    if (!t.date) return;
+    const key = (t.date as string).split("T")[0];
+    if (!tasksByDate[key]) tasksByDate[key] = { total: 0, done: 0 };
+    tasksByDate[key].total += 1;
+    if (t.completed) tasksByDate[key].done += 1;
+  });
+
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  const getChartData = () => {
+    const opt = RANGE_OPTIONS.find(o => o.value === projectionRange)!;
+    const now = new Date();
+    const pts: Array<{ label: string; date: string; displayDate: string; ideal: number; actual: number; done: number; total: number; isToday: boolean; showLabel: boolean }> = [];
+
+    if (opt.groupBy === "day") {
+      for (let i = opt.count - 1; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(now.getDate() - i);
+        const dateStr = d.toISOString().split("T")[0];
+        const tasks = tasksByDate[dateStr];
+        const done  = tasks?.done  ?? 0;
+        const total = tasks?.total ?? 0;
+        const actual = tasks
+          ? (total > 0 ? Math.round((done / total) * 100) : 0)
+          : (dateStr <= todayStr ? Math.round(twinSync) : 0);
+        const dayIdx = opt.count - 1 - i;
+        const label = opt.count <= 14
+          ? d.toLocaleDateString("en-US", { weekday: "short" })
+          : `${d.getDate()}`;
+        const showLabel = opt.count > 14 ? dayIdx % 5 === 0 || i === 0 : true;
+        pts.push({ label, date: dateStr, displayDate: d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }), ideal: 100, actual, done, total, isToday: dateStr === todayStr, showLabel });
+      }
+    } else if (opt.groupBy === "week") {
+      for (let wi = opt.count - 1; wi >= 0; wi--) {
+        const weekEnd = new Date(now);
+        weekEnd.setDate(now.getDate() - wi * 7);
+        const weekStart = new Date(weekEnd);
+        weekStart.setDate(weekEnd.getDate() - 6);
+        let doneSum = 0, totalSum = 0;
+        for (let d = 0; d < 7; d++) {
+          const day = new Date(weekStart);
+          day.setDate(weekStart.getDate() + d);
+          const dateStr = day.toISOString().split("T")[0];
+          const tasks = tasksByDate[dateStr];
+          if (tasks) { doneSum += tasks.done; totalSum += tasks.total; }
+        }
+        const actual = totalSum > 0 ? Math.round((doneSum / totalSum) * 100) : Math.round(twinSync);
+        const sLabel = weekStart.toLocaleString("en-US", { month: "short", day: "numeric" });
+        const eLabel = weekEnd.toLocaleString("en-US", { month: "short", day: "numeric" });
+        pts.push({ label: sLabel, date: weekStart.toISOString().split("T")[0], displayDate: `${sLabel} – ${eLabel}`, ideal: 100, actual, done: doneSum, total: totalSum, isToday: false, showLabel: true });
+      }
+    } else {
+      for (let mi = opt.count - 1; mi >= 0; mi--) {
+        const mDate = new Date(now);
+        mDate.setDate(1);
+        mDate.setMonth(now.getMonth() - mi);
+        const nextM = new Date(mDate);
+        nextM.setMonth(mDate.getMonth() + 1);
+        nextM.setDate(0);
+        let doneSum = 0, totalSum = 0;
+        for (let d = 1; d <= nextM.getDate(); d++) {
+          const day = new Date(mDate);
+          day.setDate(d);
+          const dateStr = day.toISOString().split("T")[0];
+          const tasks = tasksByDate[dateStr];
+          if (tasks) { doneSum += tasks.done; totalSum += tasks.total; }
+        }
+        const actual = totalSum > 0 ? Math.round((doneSum / totalSum) * 100) : Math.round(twinSync);
+        pts.push({ label: mDate.toLocaleString("en-US", { month: "short" }), date: mDate.toISOString().split("T")[0], displayDate: mDate.toLocaleString("en-US", { month: "long", year: "numeric" }), ideal: 100, actual, done: doneSum, total: totalSum, isToday: false, showLabel: true });
+      }
+    }
+    return pts;
+  };
+
+  const chartData = getChartData();
+  const maxVal = 100;
+
+  const chartW = 520;
+  const chartH = 200;
+  const padLeft = 42;
+  const padRight = 16;
+  const padTop = 16;
+  const padBottom = 36;
+  const usableW = chartW - padLeft - padRight;
+  const usableH = chartH - padTop - padBottom;
+
+  const getX = (i: number) => padLeft + (chartData.length > 1 ? (i / (chartData.length - 1)) * usableW : usableW / 2);
+  const getY = (val: number) => chartH - padBottom - (val / maxVal) * usableH;
+  const baselineY = chartH - padBottom;
+
+  const makeSmoothPath = (pts: { x: number; y: number }[]) => {
+    if (pts.length === 0) return "";
+    if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+    let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    for (let i = 1; i < pts.length; i++) {
+      const cp1x = (pts[i-1].x + (pts[i].x - pts[i-1].x) * 0.4).toFixed(1);
+      const cp2x = (pts[i].x - (pts[i].x - pts[i-1].x) * 0.4).toFixed(1);
+      d += ` C ${cp1x} ${pts[i-1].y.toFixed(1)}, ${cp2x} ${pts[i].y.toFixed(1)}, ${pts[i].x.toFixed(1)} ${pts[i].y.toFixed(1)}`;
+    }
+    return d;
+  };
+
+  const idealPts = chartData.map((d, i) => ({ x: getX(i), y: getY(d.ideal) }));
+  const actualPts = chartData.map((d, i) => ({ x: getX(i), y: getY(d.actual) }));
+  const idealLinePath = makeSmoothPath(idealPts);
+  const actualLinePath = makeSmoothPath(actualPts);
+  const idealAreaPath = idealPts.length > 0 ? `${idealLinePath} L ${idealPts[idealPts.length-1].x} ${baselineY} L ${padLeft} ${baselineY} Z` : "";
+  const actualAreaPath = actualPts.length > 0 ? `${actualLinePath} L ${actualPts[actualPts.length-1].x} ${baselineY} L ${padLeft} ${baselineY} Z` : "";
+
+  const totalDone = chartData.reduce((s, d) => s + d.actual, 0);
+  const totalIdeal = chartData.reduce((s, d) => s + d.ideal, 0);
+  const overallCompletionPct = totalIdeal > 0 ? Math.round((totalDone / totalIdeal) * 100) : 0;
+
+  const totalMilestoneCount = goals.reduce((s: number, g: GoalType) => s + (g.milestones?.length ?? 0), 0);
+  const doneMilestoneCount  = goals.reduce((s: number, g: GoalType) => s + (g.milestones?.filter((m: any) => m.completed).length ?? 0), 0);
+  const milestonePct = totalMilestoneCount > 0 ? Math.round((doneMilestoneCount / totalMilestoneCount) * 100) : 0;
+  const todayPt  = chartData.find(d => d.isToday);
+  const todayPct = todayPt ? todayPt.actual : 0;
+
+  // Goal deadline markers — find the closest chart data-point for each goal target date
+  const goalDeadlineMarkers = goals
+    .filter((g: GoalType) => g.targetDate)
+    .map((g: GoalType) => {
+      const targetStr = new Date(g.targetDate!).toISOString().split("T")[0];
+      const idx = chartData.reduce((best, pt, i) => {
+        const bd = Math.abs(new Date(chartData[best].date).getTime() - new Date(targetStr).getTime());
+        const cd = Math.abs(new Date(pt.date).getTime() - new Date(targetStr).getTime());
+        return cd < bd ? i : best;
+      }, 0);
+      return { idx, title: g.title, domain: g.domain as keyof typeof DC, dateStr: targetStr };
+    })
+    .filter((m, i, arr) => arr.findIndex(x => x.idx === m.idx) === i);
 
   return (
     <div style={{ background: "#ffffff", color: "#111111", fontFamily: '"DM Sans","Inter",-apple-system,sans-serif', overflowX: "hidden" }}>
@@ -697,7 +852,7 @@ export default function DashboardPage() {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 20px;
-          padding: 24px 40px 28px;
+          padding: 28px 40px 28px;
         }
 
         .cvf-self-card {
@@ -798,7 +953,7 @@ export default function DashboardPage() {
         }
 
         /* ── LOWER GRID (projection chart + insights) ── */
-        .lower-grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; margin-bottom: 56px; }
+        .lower-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
         .proj-card { background: #fff; border: 1px solid #e8ebf4; border-radius: 20px; padding: 28px; box-shadow: 0 2px 12px rgba(0,68,220,0.04); }
         .proj-title { font-family: 'DM Sans', sans-serif; font-size: 1.3rem; font-weight: 800; color: #111; letter-spacing: -0.02em; margin-bottom: 4px; }
         .proj-sub { font-family: 'Inter', sans-serif; font-size: 0.8rem; color: #9ca3af; font-weight: 500; margin-bottom: 22px; }
@@ -933,6 +1088,398 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        {/* ── ACTIVE GOALS & TRAJECTORY ── */}
+        <div className="section-header">
+          <span className="section-tag">Active Goals & Trajectory</span>
+          <div className="section-line" />
+        </div>
+
+        <div className="lower-grid" style={{ marginBottom: 56 }}>
+          {/* LEFT — Active Focus Goals */}
+          <div className="active-goals-panel">
+            <div className="panel-title-block" style={{ marginBottom: 20 }}>
+              <h2 className="panel-title" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "1.3rem", fontWeight: 800, color: "#111" }}>Active Focus Goals</h2>
+              <p className="panel-sub" style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.8rem", color: "#9ca3af", fontWeight: 500 }}>Complete milestones to level up your Neural Twin</p>
+            </div>
+
+          {goals.length === 0 ? (
+            <div className="dash-goals-empty" style={{ textAlign: "center", padding: "40px 20px", border: "1.5px dashed #e8ebf4", borderRadius: 20, background: "#fff" }}>
+              <Target size={28} style={{ color: "#9ca3af", marginBottom: 8, margin: "0 auto 10px" }} />
+              <div className="dash-empty-title" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "1rem", fontWeight: 800, color: "#111", marginBottom: 4 }}>No Active Goals</div>
+              <p className="dash-empty-sub" style={{ fontSize: "0.82rem", color: "#7788aa", lineHeight: 1.5, marginBottom: 16 }}>Create a goal to start tracking progress and milestones.</p>
+              <Link href="/goals" className="dash-goals-btn" style={{ display: "inline-flex", alignItems: "center", padding: "8px 16px", background: "#0055EE", color: "#fff", borderRadius: 10, textDecoration: "none", fontSize: "0.8rem", fontWeight: 700 }}>Set A Goal</Link>
+            </div>
+          ) : (
+            <div className="dash-goals-stack" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {goals.slice(0, 3).map((g, index) => {
+                const dc = DC[g.domain] || DC.health;
+                const total = g.milestones?.length ?? 0;
+                const done  = g.milestones?.filter(m => m.completed).length ?? 0;
+                const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+                const isExpanded = expandedGoals[g._id || ""] ?? (index === 0);
+                const p = PRIO[g.priority] || PRIO.medium;
+                
+                const todayTasksForCard = dailyTasks.filter((t: any) =>
+                  t.goalId === g._id && (t.date as string)?.split("T")[0] === todayStr
+                );
+                const todayTasksDone = todayTasksForCard.filter((t: any) => t.completed).length;
+
+                return (
+                  <div key={g._id || index} className="dash-goal-card" style={{ background: "#ffffff", border: "1px solid #e8ebf4", borderRadius: 20, overflow: "hidden", display: "flex", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
+                    <div className="dash-goal-bar" style={{ width: 5, background: dc.color, flexShrink: 0 }} />
+                    <div className="dash-goal-card-body" style={{ flex: 1, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 11 }}>
+                      <div className="dash-goal-header" style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }} onClick={() => setExpandedGoals(prev => ({ ...prev, [g._id || ""]: !isExpanded }))}>
+                        <div className="dash-goal-domain-icon" style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: dc.bg, color: dc.color, flexShrink: 0 }}>{dc.icon}</div>
+                        <div className="dash-goal-meta" style={{ flex: 1, minWidth: 0 }}>
+                          <h3 className="dash-goal-title" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.88rem", fontWeight: 800, color: "#111", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.title}</h3>
+                          <div className="dash-goal-tags" style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                            <span className="tag" style={{ background: p.bg, color: p.color, fontSize: "0.62rem", fontWeight: 700, padding: "2px 6px", borderRadius: 9999 }}>{p.emoji} {p.label}</span>
+                            <span className="tag tag-neutral" style={{ background: "#EEF2F8", color: "#64748B", fontSize: "0.62rem", fontWeight: 700, padding: "2px 6px", borderRadius: 9999 }}>{dc.label}</span>
+                            {todayTasksForCard.length > 0 && (
+                              <span style={{ background: todayTasksDone === todayTasksForCard.length ? "rgba(22,163,74,0.1)" : "rgba(0,85,238,0.07)", color: todayTasksDone === todayTasksForCard.length ? "#16a34a" : "#0055EE", fontSize: "0.62rem", fontWeight: 700, padding: "2px 6px", borderRadius: 9999, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                <CheckCircle2 size={8}/> {todayTasksDone}/{todayTasksForCard.length} tasks
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="dash-goal-pct-block" style={{ textAlign: "right", marginRight: 8 }}>
+                          <span className="dash-goal-pct-text" style={{ display: "block", fontSize: "0.95rem", fontWeight: 800, color: dc.color, lineHeight: 1 }}>{pct}%</span>
+                          <span className="dash-goal-pct-sub" style={{ fontSize: "0.65rem", color: "#9ca3af", fontWeight: 500 }}>{done}/{total} steps</span>
+                        </div>
+
+                        <button className="dash-goal-chevron" style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                      </div>
+
+                      <div className="dash-goal-progress-bar" style={{ height: 4, background: "#EEF1F8", borderRadius: 9999, overflow: "hidden" }}>
+                        <div className="dash-goal-progress-fill" style={{ height: "100%", width: `${pct}%`, background: dc.color, borderRadius: 9999, transition: "width 0.6s ease" }} />
+                      </div>
+
+                      {isExpanded && total > 0 && (
+                        <div className="dash-goal-milestones" style={{ background: "#F5F8FC", border: "1px solid #E8EDF5", borderRadius: 12, padding: "11px 14px", display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+                          <div style={{ fontSize: "0.6rem", fontWeight: 800, color: "#7788aa", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Milestones</div>
+                          {g.milestones?.map((m) => (
+                            <div key={m._id} className="dash-ms-row" style={{ display: "flex", alignItems: "center", gap: 10, position: "relative" }}>
+                              <div
+                                className={`dash-ms-checkbox ${m.completed ? "done" : ""}`}
+                                style={{
+                                  width: 18, height: 18, borderRadius: 5, border: m.completed ? `1px solid ${dc.color}` : "2.5px solid #BFC9D8",
+                                  background: m.completed ? dc.color : "transparent",
+                                  display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.18s"
+                                }}
+                                onClick={() => g._id && m._id && handleToggleMilestone(g._id, m._id, m.completed)}
+                              >
+                                {m.completed && <CheckCircle2 size={10} color="#fff" />}
+                              </div>
+                              <span className={`dash-ms-text ${m.completed ? "done" : ""}`} style={{ fontSize: "0.78rem", fontWeight: 500, color: m.completed ? "#8a9bb5" : "#0d1117", textDecoration: m.completed ? "line-through" : "none", flex: 1 }}>{m.text}</span>
+                              {floatId === m._id && <span className="xp-float" style={{ position: "absolute", right: 0, top: -4, fontSize: "0.71rem", fontWeight: 800, color: "#16a34a", pointerEvents: "none", whiteSpace: "nowrap" }}>+100 XP 🎉</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Today's Daily Tasks */}
+                      {isExpanded && (() => {
+                        const todayTasks = dailyTasks.filter((t: any) =>
+                          t.goalId === g._id && (t.date as string)?.split("T")[0] === todayStr
+                        );
+                        if (todayTasks.length === 0) return null;
+                        const tasksDone = todayTasks.filter((t: any) => t.completed).length;
+                        return (
+                          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 12, padding: "11px 14px", display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <div style={{ fontSize: "0.6rem", fontWeight: 800, color: "#16a34a", textTransform: "uppercase", letterSpacing: "0.1em" }}>Today's Tasks</div>
+                              <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#16a34a", background: "rgba(22,163,74,0.1)", padding: "1px 7px", borderRadius: 9999 }}>{tasksDone}/{todayTasks.length} done</span>
+                            </div>
+                            {todayTasks.map((t: any) => (
+                              <div key={t._id} style={{ display: "flex", alignItems: "center", gap: 9, position: "relative" }}>
+                                <div
+                                  style={{
+                                    width: 17, height: 17, borderRadius: 5,
+                                    border: t.completed ? "1px solid #16a34a" : "2px solid #BFC9D8",
+                                    background: t.completed ? "#16a34a" : "transparent",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    cursor: "pointer", flexShrink: 0, transition: "all 0.18s"
+                                  }}
+                                  onClick={() => t._id && handleToggleTask(t._id, t.completed)}
+                                >
+                                  {t.completed && <CheckCircle2 size={9} color="#fff" />}
+                                </div>
+                                <span style={{
+                                  fontSize: "0.77rem", fontWeight: 500, flex: 1,
+                                  color: t.completed ? "#86efac" : "#0d1117",
+                                  textDecoration: t.completed ? "line-through" : "none",
+                                }}>
+                                  {t.text}
+                                </span>
+                                {taskFloatId === t._id && (
+                                  <span className="xp-float" style={{ position: "absolute", right: 0, top: -4, fontSize: "0.71rem", fontWeight: 800, color: "#16a34a", pointerEvents: "none", whiteSpace: "nowrap" }}>+20 XP ⚡</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Link href="/goals" className="dash-goals-link" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.78rem", fontWeight: 700, color: "#0055EE", textDecoration: "none" }}>Manage all goals <ChevronRight size={13} /></Link>
+              </div>
+            </div>
+          )}
+          </div>
+
+          {/* RIGHT — Current Trajectory Chart */}
+          <div className="proj-card" style={{ position: "relative" }}>
+            {/* Header + Range Dropdown */}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, gap: 12 }}>
+              <div>
+                <div className="proj-title">Current Trajectory</div>
+                <div className="proj-sub">
+                  Ideal vs actual task completion ·{" "}
+                  <span style={{ color: "#0055EE", fontWeight: 700 }}>
+                    {RANGE_OPTIONS.find(o => o.value === projectionRange)?.label}
+                  </span>
+                  {" "}view
+                </div>
+              </div>
+              <div ref={rangeDropdownRef} style={{ position: "relative", flexShrink: 0 }}>
+                <button
+                  onClick={() => setShowRangeDropdown(v => !v)}
+                  style={{ display: "flex", alignItems: "center", gap: 7, fontSize: "0.8rem", fontWeight: 700, color: "#0055EE", background: "#f0f4ff", border: "1.5px solid #d0dfff", borderRadius: 10, padding: "8px 14px", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.2s", whiteSpace: "nowrap" }}
+                >
+                  {RANGE_OPTIONS.find(o => o.value === projectionRange)?.label ?? "1 Month"}
+                  <ChevronDown size={13} style={{ transform: showRangeDropdown ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+                </button>
+                {showRangeDropdown && (
+                  <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, width: 148, background: "#fff", border: "1px solid #e8ebf4", borderRadius: 12, boxShadow: "0 8px 28px rgba(0,68,220,0.14)", overflow: "hidden", zIndex: 50, fontFamily: "'Inter', sans-serif" }}>
+                    {RANGE_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => { setProjectionRange(opt.value); setShowRangeDropdown(false); setHoveredIdx(null); }}
+                        style={{ display: "block", width: "100%", padding: "9px 14px", textAlign: "left", background: projectionRange === opt.value ? "#f0f4ff" : "transparent", color: projectionRange === opt.value ? "#0055EE" : "#555", fontSize: "0.82rem", fontWeight: projectionRange === opt.value ? 700 : 500, border: "none", borderLeft: projectionRange === opt.value ? "3px solid #0055EE" : "3px solid transparent", cursor: "pointer", transition: "background 0.15s" }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* SVG Chart */}
+            <div style={{ position: "relative", width: "100%", userSelect: "none" }}>
+              <svg
+                viewBox={`0 0 ${chartW} ${chartH}`}
+                style={{ width: "100%", height: chartH, overflow: "visible", display: "block" }}
+              >
+                <defs>
+                  <linearGradient id="trajIdealGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#93c5fd" stopOpacity="0.22" />
+                    <stop offset="100%" stopColor="#93c5fd" stopOpacity="0" />
+                  </linearGradient>
+                  <linearGradient id="trajActualGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#0055EE" stopOpacity="0.14" />
+                    <stop offset="100%" stopColor="#0055EE" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+
+                {/* Grid lines */}
+                {[0, 1, 2, 3].map(idx => {
+                  const yVal = (maxVal / 3) * idx;
+                  const yPos = getY(yVal);
+                  return (
+                    <g key={idx}>
+                      <line x1={padLeft} y1={yPos} x2={chartW - padRight} y2={yPos} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+                      <text x={padLeft - 7} y={yPos + 4} textAnchor="end" fontSize="9" fill="#9ca3af" fontFamily="monospace" fontWeight="600">{Math.round(yVal)}%</text>
+                    </g>
+                  );
+                })}
+
+                {/* Axes */}
+                <line x1={padLeft} y1={baselineY} x2={chartW - padRight} y2={baselineY} stroke="#e2e8f0" strokeWidth="1.5" />
+                <line x1={padLeft} y1={padTop} x2={padLeft} y2={baselineY} stroke="#e2e8f0" strokeWidth="1.5" />
+
+                {/* Area fills */}
+                {idealAreaPath && <path d={idealAreaPath} fill="url(#trajIdealGrad)" />}
+                {actualAreaPath && <path d={actualAreaPath} fill="url(#trajActualGrad)" />}
+
+                {/* Ideal line */}
+                {idealLinePath && <path d={idealLinePath} fill="none" stroke="#93c5fd" strokeWidth="1.5" strokeDasharray="5 3" />}
+
+                {/* Actual line */}
+                {actualLinePath && <path d={actualLinePath} fill="none" stroke="#0055EE" strokeWidth="3" strokeLinecap="round" style={{ filter: "drop-shadow(0 3px 6px rgba(0,85,238,0.22))" }} />}
+
+                {/* Hover vertical guide */}
+                {hoveredIdx !== null && (
+                  <line x1={getX(hoveredIdx)} y1={padTop} x2={getX(hoveredIdx)} y2={baselineY} stroke="#0055EE" strokeWidth="1" strokeDasharray="4 3" strokeOpacity="0.45" />
+                )}
+
+                {/* Goal deadline markers */}
+                {goalDeadlineMarkers.map((m, i) => {
+                  const x = getX(m.idx);
+                  const domColor = DC[m.domain]?.color ?? "#0055EE";
+                  return (
+                    <g key={`dl-${i}`}>
+                      <line x1={x} y1={padTop} x2={x} y2={baselineY} stroke={domColor} strokeWidth="1.5" strokeDasharray="3 3" strokeOpacity="0.55" />
+                      <polygon points={`${x},${padTop - 2} ${x - 5},${padTop - 9} ${x + 5},${padTop - 9}`} fill={domColor} opacity="0.85" />
+                      <text x={x} y={padTop - 12} textAnchor="middle" fontSize="7" fill={domColor} fontWeight="700" fontFamily="Inter">
+                        {m.title.length > 10 ? m.title.slice(0, 9) + "…" : m.title}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Data points & labels */}
+                {chartData.map((pt, i) => {
+                  const x = getX(i);
+                  const yI = getY(pt.ideal);
+                  const yA = getY(pt.actual);
+                  const isHov = hoveredIdx === i;
+                  return (
+                    <g key={i}>
+                      <circle cx={x} cy={yI} r={isHov ? 4 : 2.5} fill="#93c5fd" stroke={isHov ? "#fff" : "none"} strokeWidth="1.5" />
+                      <circle cx={x} cy={yA} r={isHov ? 6 : pt.isToday ? 5 : 4} fill={pt.isToday ? "#22c55e" : "#0055EE"} stroke="#fff" strokeWidth="2"
+                        style={{ filter: isHov ? "drop-shadow(0 2px 8px rgba(0,85,238,0.5))" : "none" }}
+                      />
+                      {pt.showLabel && (
+                        <text x={x} y={baselineY + 14} textAnchor="middle" fontSize={chartData.length > 20 ? 7 : 9} fill={isHov ? "#0055EE" : pt.isToday ? "#22c55e" : "#7788aa"} fontWeight={isHov || pt.isToday ? "700" : "500"} fontFamily="Inter">
+                          {pt.label}
+                        </text>
+                      )}
+                      {pt.isToday && (
+                        <text x={x} y={baselineY + 26} textAnchor="middle" fontSize="6.5" fill="#22c55e" fontWeight="700" fontFamily="Inter" letterSpacing="0.06">TODAY</text>
+                      )}
+                    </g>
+                  );
+                })}
+
+                {/* Single transparent overlay rect for hover tracking */}
+                <rect
+                  x={padLeft} y={padTop} width={usableW} height={usableH + 8}
+                  fill="transparent" style={{ cursor: "crosshair" }}
+                  onMouseMove={(e) => {
+                    const svgEl = e.currentTarget.ownerSVGElement as SVGSVGElement;
+                    const rect = svgEl.getBoundingClientRect();
+                    const svgX = ((e.clientX - rect.left) / rect.width) * chartW;
+                    const rawIdx = ((svgX - padLeft) / usableW) * (chartData.length - 1);
+                    setHoveredIdx(Math.round(Math.max(0, Math.min(chartData.length - 1, rawIdx))));
+                  }}
+                  onMouseLeave={() => setHoveredIdx(null)}
+                />
+              </svg>
+
+              {/* Floating Tooltip */}
+              {hoveredIdx !== null && chartData[hoveredIdx] && (() => {
+                const pt = chartData[hoveredIdx];
+                const delta = pt.actual - 100;
+                const xPct = ((getX(hoveredIdx) - padLeft) / usableW) * 100;
+                const onLeft = xPct < 55;
+                return (
+                  <div
+                    style={{
+                      position: "absolute", top: "6%",
+                      ...(onLeft ? { left: `calc(${xPct}% + 18px)` } : { right: `calc(${100 - xPct}% + 18px)` }),
+                      background: "#ffffff", border: "1px solid #e8ebf4", borderRadius: 14,
+                      boxShadow: "0 10px 32px rgba(0,68,220,0.16)", padding: "14px 16px",
+                      minWidth: 196, zIndex: 20, pointerEvents: "none", fontFamily: "'Inter', sans-serif",
+                    }}
+                  >
+                    <div style={{ fontSize: "0.66rem", fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 9 }}>
+                      {pt.displayDate}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: "0.8rem", color: "#64748b" }}>Completion</span>
+                        <span style={{ fontSize: "0.92rem", fontWeight: 800, color: pt.actual >= 80 ? "#16a34a" : pt.actual >= 50 ? "#f59e0b" : "#ef4444" }}>
+                          {pt.actual}%
+                        </span>
+                      </div>
+                      {pt.total > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "0.8rem", color: "#64748b" }}>Tasks</span>
+                          <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#64748b" }}>{pt.done} / {pt.total}</span>
+                        </div>
+                      )}
+                      <div style={{ height: 1, background: "#f0f2f8" }} />
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: "0.8rem", color: "#64748b" }}>vs Ideal</span>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 700, color: delta >= 0 ? "#16a34a" : "#ef4444" }}>
+                          {delta >= 0 ? `+${delta}` : delta}%
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ height: 4, background: "#f1f5f9", borderRadius: 2, overflow: "hidden", marginTop: 11 }}>
+                      <div style={{ height: "100%", width: `${Math.min(pt.actual, 100)}%`, background: pt.actual >= 80 ? "#16a34a" : pt.actual >= 50 ? "#f59e0b" : "#ef4444", borderRadius: 2 }} />
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Legend + Summary Stats */}
+            <div style={{ display: "flex", gap: 14, alignItems: "center", borderTop: "1px solid #f0f2f8", paddingTop: 14, marginTop: 14, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.76rem", fontWeight: 600, color: "#64748b" }}>
+                <span style={{ width: 14, height: 0, borderTop: "2px dashed #93c5fd", display: "inline-block" }} />
+                100% Target
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.76rem", fontWeight: 600, color: "#0055EE" }}>
+                <span style={{ width: 14, height: 3, background: "#0055EE", display: "inline-block", borderRadius: 2 }} />
+                Your Path
+              </div>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 20, alignItems: "center" }}>
+                {[
+                  { label: "Period Avg",  val: `${overallCompletionPct}%`, color: overallCompletionPct >= 70 ? "#16a34a" : overallCompletionPct >= 40 ? "#f59e0b" : "#ef4444" },
+                  { label: "Milestones", val: `${milestonePct}%`,          color: milestonePct >= 70 ? "#16a34a" : milestonePct >= 40 ? "#f59e0b" : "#ef4444" },
+                  { label: "Today",      val: `${todayPct}%`,              color: todayPct >= 70 ? "#16a34a" : todayPct >= 40 ? "#f59e0b" : "#ef4444" },
+                  { label: "Twin Sync",  val: `${twinSync}%`,              color: twinSync > 70 ? "#16a34a" : "#f59e0b" },
+                ].map(s => (
+                  <div key={s.label} style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "0.6rem", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2, fontFamily: "'Inter', sans-serif" }}>{s.label}</div>
+                    <div style={{ fontSize: "1rem", fontWeight: 800, color: s.color, fontFamily: "'DM Sans', sans-serif" }}>{s.val}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* ── AI INSIGHT FEED (3-column horizontal) ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18, marginBottom: 56 }}>
+          {aiLoading ? (
+            Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className="insight-card">
+                <div className="insight-tag-row">
+                  <span className="shimmer-text" style={{ width: 100, height: 12 }} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                  <span className="shimmer-text" style={{ width: "100%", height: 14 }} />
+                  <span className="shimmer-text" style={{ width: "80%", height: 14 }} />
+                </div>
+              </div>
+            ))
+          ) : (
+            [
+              { tag: "Twin Prediction", text: aiData?.twinPrediction || "Your career trajectory is projected to improve significantly with consistent study habits." },
+              { tag: "Daily Reflection", text: aiData?.dailyReflection || "Your consistency over the past week is building strong long-term momentum." },
+              { tag: "Daily Challenge", text: aiData?.dailyChallenge || "Log all three domains today to expand your Twin Sync calibration index." },
+            ].map((ins, idx) => (
+              <div key={idx} className="insight-card">
+                <div className="insight-tag-row">
+                  <span className="insight-tag">{ins.tag}</span>
+                  <ArrowUpRight size={14} style={{ color: "#9ca3af" }} />
+                </div>
+                <div className="insight-text">{ins.text}</div>
+              </div>
+            ))
+          )}
+        </div>
+
         {/* ── CURRENT SELF VS FUTURE SELF ── */}
         <div className="section-header">
           <span className="section-tag">Self Trajectory</span>
@@ -941,116 +1488,11 @@ export default function DashboardPage() {
 
         <div className="cvf-card">
 
-          {/* ══ HERO BANNER ══ */}
-          <div className="cvf-hero-banner">
-            <div className="cvf-hero-inner">
-
-              {/* LEFT — title + pills */}
-              <div className="cvf-hero-left">
-                <div className="cvf-hero-eyebrow">
-                  <span className="live-dot" style={{ width: 6, height: 6 }} />
-                  AI-Powered Projection
-                </div>
-                <div className="cvf-hero-title">Current Self vs Future Self</div>
-                <div className="cvf-hero-sub">AI-driven 12-month projection based on your behavioural telemetry</div>
-
-                <div className="cvf-pill-row">
-                  <div className="cvf-pill">
-                    <div>
-                      <div className="cvf-pill-val" style={{ color: "#60aaff" }}>{daysRemaining}</div>
-                      <div className="cvf-pill-lbl">Days Left</div>
-                    </div>
-                  </div>
-                  <div className="cvf-pill">
-                    <div>
-                      <div className="cvf-pill-val" style={{ color: "#4ade80" }}>
-                        {aiLoading ? (
-                          <span className="shimmer-text" style={{ width: 34, height: 20, verticalAlign: "middle" }} />
-                        ) : (
-                          `${aiData?.confidence || 84}%`
-                        )}
-                      </div>
-                      <div className="cvf-pill-lbl">Confidence</div>
-                    </div>
-                  </div>
-                  <div className="cvf-pill">
-                    <div>
-                      <div className="cvf-pill-val" style={{ color: "#fbbf24" }}>
-                        {deltaScore >= 0 ? `+${deltaScore}` : deltaScore}
-                      </div>
-                      <div className="cvf-pill-lbl">Delta Score</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* RIGHT — readiness ring (FIXED: larger + text centred) */}
-              <div className="cvf-hero-ring-block">
-                <div className="cvf-ring-container">
-                  {/* SVG ring */}
-                  <svg viewBox="0 0 148 148" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                      <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#60aaff" />
-                        <stop offset="100%" stopColor="#ffffff" />
-                      </linearGradient>
-                    </defs>
-                    {/* track */}
-                    <circle cx="74" cy="74" r="60" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="10" />
-                    {/* fill */}
-                    <circle
-                      cx="74" cy="74" r="60"
-                      fill="none"
-                      stroke="url(#ringGrad)"
-                      strokeWidth="10"
-                      strokeLinecap="round"
-                      strokeDasharray={`${(twinSync / 100) * 2 * Math.PI * 60} ${2 * Math.PI * 60}`}
-                      style={{ filter: "drop-shadow(0 0 8px rgba(96,170,255,0.5))" }}
-                    />
-                  </svg>
-                  {/* centred text — rendered as a flex child inside the container, NOT inside SVG */}
-                  <div className="cvf-ring-inner">
-                    <span className="cvf-ring-pct">{twinSync}%</span>
-                    <span className="cvf-ring-label">Readiness</span>
-                  </div>
-                </div>
-                <div className="cvf-ring-caption">Twin Sync Index</div>
-              </div>
-
-            </div>
-          </div>
-
-          {/* ══ PROGRESS BAR STRIP ══ */}
-          <div className="cvf-progress-strip">
-            <span className="cvf-progress-strip-label">Overall Progress</span>
-            <div className="cvf-progress-track">
-              <div className="cvf-progress-fill" style={{ width: `${overallProgress}%` }} />
-            </div>
-            <span className="cvf-progress-pct">{overallProgress}%</span>
-          </div>
-
-          {/* ══ OUTCOME STRIP ══ */}
-          <div className="cvf-outcome-strip">
-            <div className="cvf-outcome-icon">
-              <Zap size={16} color="#fff" />
-            </div>
-            <div className="cvf-outcome-body" style={{ width: "100%" }}>
-              <div className="cvf-outcome-eyebrow">Projected Outcome</div>
-              <div className="cvf-outcome-text" style={{ width: "100%" }}>
-                {aiLoading ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", marginTop: 4 }}>
-                    <span className="shimmer-text" style={{ width: "95%", height: 14 }} />
-                    <span className="shimmer-text" style={{ width: "70%", height: 14 }} />
-                  </div>
-                ) : (
-                  aiData?.twinPrediction || "Career Acceleration Likely in 4–6 months. Consistently logging your sleep and spending this week will significantly improve prediction accuracy."
-                )}
-              </div>
-            </div>
-          </div>
-
           {/* ══ COMPARISON CARDS ══ */}
           <div className="cvf-compare">
+            <div style={{ gridColumn: "1/-1", fontSize: "1.15rem", fontWeight: 800, color: "#111", letterSpacing: "-0.02em", marginBottom: 4, fontFamily: "'DM Sans', sans-serif" }}>
+              Current Self vs Future Self
+            </div>
 
             {/* TODAY */}
             <div className="cvf-self-card">
@@ -1143,171 +1585,6 @@ export default function DashboardPage() {
 
           </div>
 
-          {/* ══ MISSION FOOTER ══ */}
-          <div className="cvf-mission-footer">
-            <Sparkles size={15} style={{ color: "#3322EE", flexShrink: 0 }} />
-            <span className="cvf-mission-text">{mission}</span>
-          </div>
-
-        </div>
-
-        {/* ── ACTIVE FOCUS GOALS ── */}
-        <div className="section-header">
-          <span className="section-tag">Active Focus Goals</span>
-          <div className="section-line" />
-        </div>
-
-        <div className="active-goals-panel" style={{ width: "100%", marginBottom: 56 }}>
-          <div className="panel-title-block" style={{ marginBottom: 20 }}>
-            <h2 className="panel-title" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "1.3rem", fontWeight: 800, color: "#111" }}>Active Focus Goals</h2>
-            <p className="panel-sub" style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.8rem", color: "#9ca3af", fontWeight: 500 }}>Complete milestones to level up your Neural Twin</p>
-          </div>
-
-          {goals.length === 0 ? (
-            <div className="dash-goals-empty" style={{ textAlign: "center", padding: "40px 20px", border: "1.5px dashed #e8ebf4", borderRadius: 20, background: "#fff" }}>
-              <Target size={28} style={{ color: "#9ca3af", marginBottom: 8, margin: "0 auto 10px" }} />
-              <div className="dash-empty-title" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "1rem", fontWeight: 800, color: "#111", marginBottom: 4 }}>No Active Goals</div>
-              <p className="dash-empty-sub" style={{ fontSize: "0.82rem", color: "#7788aa", lineHeight: 1.5, marginBottom: 16 }}>Create a goal to start tracking progress and milestones.</p>
-              <Link href="/goals" className="dash-goals-btn" style={{ display: "inline-flex", alignItems: "center", padding: "8px 16px", background: "#0055EE", color: "#fff", borderRadius: 10, textDecoration: "none", fontSize: "0.8rem", fontWeight: 700 }}>Set A Goal</Link>
-            </div>
-          ) : (
-            <div className="dash-goals-stack" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {goals.slice(0, 3).map((g, index) => {
-                const dc = DC[g.domain] || DC.health;
-                const total = g.milestones?.length ?? 0;
-                const done  = g.milestones?.filter(m => m.completed).length ?? 0;
-                const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
-                const isExpanded = expandedGoals[g._id || ""] ?? (index === 0);
-                const p = PRIO[g.priority] || PRIO.medium;
-                
-                return (
-                  <div key={g._id || index} className="dash-goal-card" style={{ background: "#ffffff", border: "1px solid #e8ebf4", borderRadius: 20, overflow: "hidden", display: "flex", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-                    <div className="dash-goal-bar" style={{ width: 5, background: dc.color, flexShrink: 0 }} />
-                    <div className="dash-goal-card-body" style={{ flex: 1, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 11 }}>
-                      <div className="dash-goal-header" style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }} onClick={() => setExpandedGoals(prev => ({ ...prev, [g._id || ""]: !isExpanded }))}>
-                        <div className="dash-goal-domain-icon" style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: dc.bg, color: dc.color, flexShrink: 0 }}>{dc.icon}</div>
-                        <div className="dash-goal-meta" style={{ flex: 1, minWidth: 0 }}>
-                          <h3 className="dash-goal-title" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.88rem", fontWeight: 800, color: "#111", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.title}</h3>
-                          <div className="dash-goal-tags" style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                            <span className="tag" style={{ background: p.bg, color: p.color, fontSize: "0.62rem", fontWeight: 700, padding: "2px 6px", borderRadius: 9999 }}>{p.emoji} {p.label}</span>
-                            <span className="tag tag-neutral" style={{ background: "#EEF2F8", color: "#64748B", fontSize: "0.62rem", fontWeight: 700, padding: "2px 6px", borderRadius: 9999 }}>{dc.label}</span>
-                          </div>
-                        </div>
-                        
-                        <div className="dash-goal-pct-block" style={{ textAlign: "right", marginRight: 8 }}>
-                          <span className="dash-goal-pct-text" style={{ display: "block", fontSize: "0.95rem", fontWeight: 800, color: dc.color, lineHeight: 1 }}>{pct}%</span>
-                          <span className="dash-goal-pct-sub" style={{ fontSize: "0.65rem", color: "#9ca3af", fontWeight: 500 }}>{done}/{total} steps</span>
-                        </div>
-
-                        <button className="dash-goal-chevron" style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", display: "flex", alignItems: "center" }}>
-                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        </button>
-                      </div>
-
-                      <div className="dash-goal-progress-bar" style={{ height: 4, background: "#EEF1F8", borderRadius: 9999, overflow: "hidden" }}>
-                        <div className="dash-goal-progress-fill" style={{ height: "100%", width: `${pct}%`, background: dc.color, borderRadius: 9999, transition: "width 0.6s ease" }} />
-                      </div>
-
-                      {isExpanded && total > 0 && (
-                        <div className="dash-goal-milestones" style={{ background: "#F5F8FC", border: "1px solid #E8EDF5", borderRadius: 12, padding: "11px 14px", display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
-                          {g.milestones?.map((m) => (
-                            <div key={m._id} className="dash-ms-row" style={{ display: "flex", alignItems: "center", gap: 10, position: "relative" }}>
-                              <div
-                                className={`dash-ms-checkbox ${m.completed ? "done" : ""}`}
-                                style={{
-                                  width: 18, height: 18, borderRadius: 5, border: m.completed ? `1px solid ${dc.color}` : "2.5px solid #BFC9D8",
-                                  background: m.completed ? dc.color : "transparent",
-                                  display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.18s"
-                                }}
-                                onClick={() => g._id && m._id && handleToggleMilestone(g._id, m._id, m.completed)}
-                              >
-                                {m.completed && <CheckCircle2 size={10} color="#fff" />}
-                              </div>
-                              <span className={`dash-ms-text ${m.completed ? "done" : ""}`} style={{ fontSize: "0.78rem", fontWeight: 500, color: m.completed ? "#8a9bb5" : "#0d1117", textDecoration: m.completed ? "line-through" : "none", flex: 1 }}>{m.text}</span>
-                              {floatId === m._id && <span className="xp-float" style={{ position: "absolute", right: 0, top: -4, fontSize: "0.71rem", fontWeight: 800, color: "#16a34a", pointerEvents: "none", whiteSpace: "nowrap" }}>+100 XP 🎉</span>}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <Link href="/goals" className="dash-goals-link" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.78rem", fontWeight: 700, color: "#0055EE", textDecoration: "none" }}>Manage all goals <ChevronRight size={13} /></Link>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── PROJECTION & AI INSIGHTS ── */}
-        <div className="section-header">
-          <span className="section-tag">Projection & Insights</span>
-          <div className="section-line" />
-        </div>
-
-        <div className="lower-grid">
-          <div className="proj-card">
-            <div className="proj-title">Future Trajectory</div>
-            <div className="proj-sub">AI-powered projection based on your logs</div>
-
-            <div className="proj-trajectory">
-              {[
-                { label: "Health Path", current: healthScore, target: projectedHealthScore, color: "#22c55e" },
-                { label: "Finance Path", current: financeScore, target: projectedFinanceScore, color: "#0055EE" },
-                { label: "Career Path",  current: careerScore, target: projectedCareerScore, color: "#3322EE" },
-              ].map((t, i) => (
-                <div key={i}>
-                  <div className="proj-traj-row">
-                    <span>{t.label}</span>
-                    <span className="proj-traj-val" style={{ background: `${t.color}12`, color: t.color }}>{t.current} → {t.target}</span>
-                  </div>
-                  <div className="proj-bar-track">
-                    <div className="proj-bar-fill" style={{ width: `${t.current}%`, background: `linear-gradient(90deg, ${t.color}88, ${t.color})` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="proj-stats">
-              <div><div className="proj-stat-label">Confidence</div><div className="proj-stat-val">{aiData?.confidence || 84}%</div></div>
-              <div><div className="proj-stat-label">Days Tracked</div><div className="proj-stat-val">{Math.max(12, logs.length * 3 + streak * 2 + 10)}</div></div>
-              <div style={{ marginLeft: "auto" }}>
-                <Link href="/simulator" className="proj-open-btn">Open Simulator <ChevronRight size={13} /></Link>
-              </div>
-            </div>
-          </div>
-
-          <div className="insights-col">
-            <div className="insights-col-label">AI Insight Feed</div>
-            {aiLoading ? (
-              Array.from({ length: 3 }).map((_, idx) => (
-                <div key={idx} className="insight-card">
-                  <div className="insight-tag-row">
-                    <span className="shimmer-text" style={{ width: 100, height: 12 }} />
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
-                    <span className="shimmer-text" style={{ width: "100%", height: 14 }} />
-                    <span className="shimmer-text" style={{ width: "80%", height: 14 }} />
-                  </div>
-                </div>
-              ))
-            ) : (
-              [
-                { tag: "Twin Prediction", text: aiData?.twinPrediction || "Your career trajectory is projected to improve significantly with consistent study habits." },
-                { tag: "Daily Reflection", text: aiData?.dailyReflection || "Your consistency over the past week is building strong long-term momentum." },
-                { tag: "Daily Challenge", text: aiData?.dailyChallenge || "Log all three domains today to expand your Twin Sync calibration index." },
-              ].map((ins, idx) => (
-                <div key={idx} className="insight-card">
-                  <div className="insight-tag-row">
-                    <span className="insight-tag">{ins.tag}</span>
-                    <ArrowUpRight size={14} style={{ color: "#9ca3af" }} />
-                  </div>
-                  <div className="insight-text">{ins.text}</div>
-                </div>
-              ))
-            )}
-          </div>
         </div>
 
         {/* ── QUICK ACTIONS ── */}
@@ -1332,6 +1609,23 @@ export default function DashboardPage() {
         </div>
 
       </div>
+
+      {toast && (
+        <div style={{
+          position:"fixed", bottom:24, right:24, zIndex:9999,
+          background:toast.ok?"#f0fdf4":"#fef2f2",
+          border:`1px solid ${toast.ok?"#bbf7d0":"#fecaca"}`,
+          color:toast.ok?"#15803d":"#b91c1c",
+          padding:"11px 18px", borderRadius:12,
+          fontSize:"0.82rem", fontWeight:600,
+          boxShadow:"0 4px 20px rgba(0,0,0,0.12)",
+          display:"flex", alignItems:"center", gap:10,
+          fontFamily:"'Inter',sans-serif", maxWidth:320,
+        }}>
+          <span>{toast.ok?"✓":"⚠"}</span>
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }

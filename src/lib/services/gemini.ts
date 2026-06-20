@@ -80,6 +80,15 @@ export async function callGemini<T = any>(
 
       if (!res.ok) {
         const errText = await res.text();
+        if (res.status === 400 && errText.includes("API_KEY_INVALID")) {
+          throw new Error("GEMINI_AUTH_ERROR: API key is invalid or has expired.");
+        }
+        if (res.status === 401 || res.status === 403) {
+          throw new Error("GEMINI_AUTH_ERROR: Unauthorized — check your Gemini API key.");
+        }
+        if (res.status === 429) {
+          throw new Error("GEMINI_QUOTA_ERROR: API rate limit or daily quota exceeded.");
+        }
         throw new Error(`API Error ${res.status}: ${errText}`);
       }
       const raw = await res.json();

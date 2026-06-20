@@ -17,6 +17,15 @@ export interface IGoal {
   milestones: IMilestone[]; // NEW: Milestone tracking
 }
 
+// 2.5. Daily Task Interface
+export interface IDailyTask {
+  _id?: mongoose.Types.ObjectId;
+  text: string;
+  completed: boolean;
+  date: string; // format YYYY-MM-DD
+  goalId?: mongoose.Types.ObjectId;
+}
+
 // 3. Main User Interface (UPDATED)
 export interface IUser extends Document {
   email: string;
@@ -69,6 +78,7 @@ export interface IUser extends Document {
     tag: "venting" | "advice" | "distraction" | "motivation";
   }>;
   goals: IGoal[];
+  dailyTasks?: IDailyTask[];
   aiSnapshot?: {
     dailyReflection: any;
     lastGeneratedAt: Date | null;
@@ -100,6 +110,16 @@ const GoalSchema = new Schema<IGoal>(
     priority: { type: String, required: true },
     targetDate: { type: Date }, // NEW
     milestones: [MilestoneSchema], // NEW
+  },
+  { _id: true }
+);
+
+const DailyTaskSchema = new Schema<IDailyTask>(
+  {
+    text: { type: String, required: true },
+    completed: { type: Boolean, default: false },
+    date: { type: String, required: true },
+    goalId: { type: Schema.Types.ObjectId }
   },
   { _id: true }
 );
@@ -154,6 +174,7 @@ const UserSchema = new Schema<IUser>(
 
     // Goals Array
     goals: [GoalSchema],
+    dailyTasks: { type: [DailyTaskSchema], default: [] },
 
     profile: {
       monthlyIncome: { type: Number, default: 0 },

@@ -54,6 +54,7 @@ export const rl = {
   aiDomain:     (uid: string) => checkRateLimit(`${uid}:domain`,     12, 60 * 60 * 1000), // 12/hr
   simulate:     (uid: string) => checkRateLimit(`${uid}:simulate`,   20, 60 * 60 * 1000), // 20/hr
   milestones:   (uid: string) => checkRateLimit(`${uid}:milestones`, 15, 60 * 60 * 1000), // 15/hr
+  dailyTasks:   (uid: string) => checkRateLimit(`${uid}:dailyTasks`, 25, 60 * 60 * 1000), // 25/hr
   login:        (ip: string)  => checkRateLimit(`${ip}:login`,       10, 15 * 60 * 1000), // 10 per 15 min
   parse:        (uid: string) => checkRateLimit(`${uid}:parse`,       10, 60 * 60 * 1000), // 10/hr (PARSE_LIMIT parses per PARSE_WINDOW_MS)
 };

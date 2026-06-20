@@ -376,6 +376,9 @@ export default function ProfilePage() {
   const [pwError,      setPwError]      = useState("");
   const [pwSuccess,    setPwSuccess]    = useState(false);
   const [vectorPulse,  setVectorPulse]  = useState(false);
+  const [saveError,    setSaveError]    = useState("");
+  const [toast,        setToast]        = useState<{msg:string;ok:boolean}|null>(null);
+  const showToast = (msg:string, ok=false) => { setToast({msg,ok}); setTimeout(()=>setToast(null), 3500); };
 
   const twinText = useTypewriter("Twin Profile");
 
@@ -531,7 +534,7 @@ export default function ProfilePage() {
       if (!res.ok) throw new Error(d.error||"Failed to update profile.");
       mutateProfile(); setEditMode(false);
       window.dispatchEvent(new Event("syntra-refresh"));
-    } catch(e:any) { alert(e.message||"Save failed."); }
+    } catch(e:any) { setSaveError(e.message||"Save failed."); }
     finally { setLoading(false); }
   };
 
@@ -541,7 +544,7 @@ export default function ProfilePage() {
     try {
       await fetch("/api/profile", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ avatarId:Number(numId) }) });
       mutateProfile(); window.dispatchEvent(new Event("syntra-refresh"));
-    } catch(e) { console.error(e); }
+    } catch { showToast("Could not save avatar. Try again."); }
   };
 
   const handleVectorSelect = async (v: OptVector) => {
@@ -550,7 +553,7 @@ export default function ProfilePage() {
     try {
       await fetch("/api/profile", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ optimizationVector:v }) });
       mutateProfile(); window.dispatchEvent(new Event("syntra-refresh"));
-    } catch(e) { console.error(e); }
+    } catch { showToast("Could not save focus vector. Try again."); }
   };
 
   const handlePwSubmit = () => {
@@ -866,11 +869,16 @@ export default function ProfilePage() {
                           <input className="form-slider" type="range" min="0" max="14" step="0.5" value={editStudy} onChange={e=>setEditStudy(e.target.value)}/>
                         </div>
                       </div>
+                      {saveError && (
+                        <div style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 14px", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:10, color:"#b91c1c", fontSize:"0.8rem", fontWeight:600, marginBottom:10 }}>
+                          <span>⚠</span>{saveError}
+                        </div>
+                      )}
                       <div className="edit-actions">
-                        <button className="btn-save" onClick={handleEditSave} disabled={loading}>
+                        <button className="btn-save" onClick={()=>{ setSaveError(""); handleEditSave(); }} disabled={loading}>
                           {loading?<RefreshCw size={13} style={{animation:"spin 0.8s linear infinite"}}/>:<Save size={13}/>} Save All Changes
                         </button>
-                        <button className="btn-cancel" onClick={()=>setEditMode(false)}><X size={13}/> Cancel</button>
+                        <button className="btn-cancel" onClick={()=>{ setEditMode(false); setSaveError(""); }}><X size={13}/> Cancel</button>
                       </div>
                     </div>
                   ) : (
@@ -991,6 +999,23 @@ export default function ProfilePage() {
           </div>{/* pf-inner */}
         </div>{/* pf-right */}
       </div>{/* pf-body */}
+
+      {toast && (
+        <div style={{
+          position:"fixed", bottom:24, right:24, zIndex:9999,
+          background:toast.ok?"#f0fdf4":"#fef2f2",
+          border:`1px solid ${toast.ok?"#bbf7d0":"#fecaca"}`,
+          color:toast.ok?"#15803d":"#b91c1c",
+          padding:"11px 18px", borderRadius:12,
+          fontSize:"0.82rem", fontWeight:600,
+          boxShadow:"0 4px 20px rgba(0,0,0,0.12)",
+          display:"flex", alignItems:"center", gap:10,
+          fontFamily:"'Inter',sans-serif", maxWidth:320,
+        }}>
+          <span>{toast.ok?"✓":"⚠"}</span>
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }

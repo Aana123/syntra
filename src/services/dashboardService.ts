@@ -69,6 +69,7 @@ export async function getDashboardData(userId: string, email: string) {
       badges: user.badges || [] // Serving the unlocked badges to the UI
     },
     goals: user.goals,
+    dailyTasks: user.dailyTasks || [],
     
     // The standalone logs fetched concurrently
     timeline: recentLogs 

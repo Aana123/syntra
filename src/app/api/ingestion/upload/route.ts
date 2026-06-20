@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import crypto from "crypto";
 import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
@@ -100,6 +101,17 @@ export async function POST(req: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    const fileHash = crypto.createHash("sha256").update(buffer).digest("hex");
+
+    await connectDB();
+    const existingUpload = await Log.findOne({ userId, fileHash });
+    if (existingUpload) {
+      return NextResponse.json({
+        success: false,
+        error: "This document has already been uploaded and processed."
+      }, { status: 409 });
+    }
+
     let extractedText = "";
     let imageOption: { mimeType: string; data: string } | undefined = undefined;
     const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp)$/i.test(file.name);
@@ -183,11 +195,32 @@ ${isImage ? "" : `\n--- DOCUMENT TEXT ---\n${extractedText.slice(0, 5000)}`}
       data: z.record(z.string(), z.unknown()),
     });
 
-    const mergedRaw = await callGemini<unknown>(mergedPrompt, {
-      temperature: 0.1,
-      maxTokens: 3000,
-      image: imageOption
-    });
+    let mergedRaw: unknown;
+    try {
+      mergedRaw = await callGemini<unknown>(mergedPrompt, {
+        temperature: 0.1,
+        maxTokens: 3000,
+        image: imageOption,
+      });
+    } catch (aiErr: any) {
+      const msg: string = aiErr?.message ?? "";
+      if (msg.startsWith("GEMINI_AUTH_ERROR") || msg.includes("GEMINI_API_KEY not set")) {
+        return NextResponse.json(
+          { error: "AI service is temporarily unavailable. Please try again later." },
+          { status: 503 }
+        );
+      }
+      if (msg.startsWith("GEMINI_QUOTA_ERROR")) {
+        return NextResponse.json(
+          { error: "AI usage limit reached. Please wait a few minutes and try again." },
+          { status: 429 }
+        );
+      }
+      return NextResponse.json(
+        { error: "Could not analyse the document. Please try again." },
+        { status: 503 }
+      );
+    }
     const envelope = EnvelopeSchema.safeParse(mergedRaw);
 
     if (!envelope.success) {
@@ -259,13 +292,15 @@ ${isImage ? "" : `\n--- DOCUMENT TEXT ---\n${extractedText.slice(0, 5000)}`}
           ...existingLog.domainData,
           [category]: updatedData
         };
+        existingLog.fileHash = fileHash;
         await existingLog.save();
       } else {
         await Log.create({
           userId: user._id,
           date: new Date(),
           domain: "health",
-          domainData: { [category]: updatedData }
+          domainData: { [category]: updatedData },
+          fileHash: fileHash
         });
       }
       summaryMessage = `Parsed ${category.replace("_", " ")} and merged metrics into your health logs.`;
@@ -290,7 +325,8 @@ ${isImage ? "" : `\n--- DOCUMENT TEXT ---\n${extractedText.slice(0, 5000)}`}
             source: "pdf-ingestion",
             ingestedAt: new Date()
           }
-        }
+        },
+        fileHash: fileHash
       });
       
     } else if (["credit_card", "loan_document", "stock_portfolio", "insurance_policy"].includes(category)) {
@@ -312,13 +348,15 @@ ${isImage ? "" : `\n--- DOCUMENT TEXT ---\n${extractedText.slice(0, 5000)}`}
           ...existingLog.domainData,
           [category]: updatedData
         };
+        existingLog.fileHash = fileHash;
         await existingLog.save();
       } else {
         await Log.create({
           userId: user._id,
           date: new Date(),
           domain: "finance",
-          domainData: { [category]: updatedData }
+          domainData: { [category]: updatedData },
+          fileHash: fileHash
         });
       }
       summaryMessage = `Parsed ${category.replace("_", " ")} and merged assets into your financial logs.`;
@@ -356,13 +394,15 @@ ${isImage ? "" : `\n--- DOCUMENT TEXT ---\n${extractedText.slice(0, 5000)}`}
           ...existingLog.domainData,
           [category]: updatedData
         };
+        existingLog.fileHash = fileHash;
         await existingLog.save();
       } else {
         await Log.create({
           userId: user._id,
           date: new Date(),
           domain: "career",
-          domainData: { [category]: updatedData }
+          domainData: { [category]: updatedData },
+          fileHash: fileHash
         });
       }
       summaryMessage = `Parsed ${category} and updated your career skill taxonomy.`;
@@ -453,8 +493,9 @@ ${isImage ? "" : `\n--- DOCUMENT TEXT ---\n${extractedText.slice(0, 5000)}`}
 
   } catch (error: any) {
     console.error("INGESTION UPLOAD ERROR:", error);
-    return NextResponse.json({
-      error: error.message || "Failed to process and parse document."
-    }, { status: 500 });
+    return NextResponse.json(
+      { error: "Something went wrong while processing your document. Please try again." },
+      { status: 500 }
+    );
   }
 }

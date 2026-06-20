@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import Log from "@/models/Log";
+import crypto from "crypto";
 import * as xlsx from "xlsx";
 import { generateAndStoreSnapshot } from "@/lib/services/snapshotService";
 import { recalculateStreak } from "@/lib/logic/streak";
@@ -327,6 +328,12 @@ export const POST = apiHandler(async (req: Request) => {
     throw new ApiError(404, "User not found");
   }
 
+  const fileHash = crypto.createHash("sha256").update(buffer).digest("hex");
+  const existingUpload = await Log.findOne({ userId: user._id, fileHash });
+  if (existingUpload) {
+    throw new ApiError(409, "This spreadsheet has already been uploaded and processed.");
+  }
+
   // 6. Define numeric parsing variables and mappings
   const numericFields = [
     "sleephours", "workoutminutes", "stresslevel", "moodscore", "energylevel",
@@ -392,7 +399,8 @@ export const POST = apiHandler(async (req: Request) => {
       userId: user._id,
       domain: domain,
       domainData: record,
-      date: logDate
+      date: logDate,
+      fileHash: fileHash
     });
   }
 

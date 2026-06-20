@@ -5,7 +5,8 @@ export interface ILog extends Document {
   userId: mongoose.Types.ObjectId; // FIXED: Must be ObjectId
   date: Date;
   domain: string;
-  domainData: Record<string, any>; 
+  domainData: Record<string, any>;
+  fileHash?: string; 
 }
 
 const LogSchema = new Schema<ILog>(
@@ -14,7 +15,8 @@ const LogSchema = new Schema<ILog>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true }, 
     date: { type: Date, default: Date.now },
     domain: { type: String, required: true },
-    domainData: { type: Schema.Types.Mixed, required: true } 
+    domainData: { type: Schema.Types.Mixed, required: true },
+    fileHash: { type: String, index: true }
   },
   { timestamps: true }
 );

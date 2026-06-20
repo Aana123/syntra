@@ -97,6 +97,7 @@ export async function GET() {
     return NextResponse.json({ 
       success: true, 
       goals: user?.goals || [], 
+      dailyTasks: user?.dailyTasks || [], 
       badges: user?.badges || [],
       gamification: user?.gamification || { totalPoints: 0, currentStreak: 0, lastLogDate: null },
       scores: user?.scores || { health: 50, finance: 50, career: 50 }
