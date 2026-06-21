@@ -2061,76 +2061,8 @@ export default function GoalsPage() {
                   </div>
                 </div>
 
-                <div className="body-pad" style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 28 }}>
-                  {/* LEFT COLUMN: TASK LIST */}
-                  <div>
-                    <div className="section-hd">
-                      <span className="section-hd-label">Tasks for {selectedDate === new Date().toISOString().split("T")[0] ? "Today" : selectedDate}</span>
-                      <div className="section-hd-rule" />
-                    </div>
-
-                    {dailyTasks.filter(t => t.date === selectedDate).length === 0 ? (
-                      <div className="empty-state" style={{ padding: "64px 32px" }}>
-                        <div className="empty-state-icon">📋</div>
-                        <div className="empty-state-title">No tasks for this day</div>
-                        <p className="empty-state-sub">Use the sidebar panels to add tasks manually or generate them with AI.</p>
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
-                        {dailyTasks.filter(t => t.date === selectedDate).map(t => {
-                          const linkedGoal = goals.find(g => g._id === t.goalId);
-                          const dc = linkedGoal ? DC[linkedGoal.domain] : null;
-
-                          return (
-                            <div 
-                              key={t._id} 
-                              className="goal-preview-row" 
-                              style={{ 
-                                cursor: "default", 
-                                borderLeft: dc ? `4px solid ${dc.color}` : "1px solid rgba(0,0,0,0.07)",
-                                padding: "12px 16px" 
-                              }}
-                            >
-                              <div
-                                className={`ms-checkbox ${t.completed ? "ms-checkbox-done" : ""}`}
-                                style={t.completed && dc ? { background: dc.color, borderColor: dc.color } : t.completed ? { background: BRAND, borderColor: BRAND } : {}}
-                                onClick={() => t._id && handleToggleTask(t._id, t.completed)}
-                              >
-                                {t.completed && <CheckCircle2 size={10} color="#fff" />}
-                              </div>
-                              
-                              <div style={{ flex: 1, minWidth: 0, paddingLeft: 6 }}>
-                                <span 
-                                  className={`ms-text ${t.completed ? "ms-check-done" : ""}`} 
-                                  style={{ fontSize: "0.85rem", fontWeight: 600, color: t.completed ? "var(--text-muted)" : "var(--text-primary)" }}
-                                >
-                                  {t.text}
-                                </span>
-                                {linkedGoal && (
-                                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-                                    <span className="tag tag-neutral" style={{ fontSize: "0.6rem", padding: "1px 6px" }}>
-                                      {linkedGoal.title}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-
-                              <button 
-                                className="gc-btn gc-btn-del" 
-                                style={{ opacity: 1 }}
-                                onClick={() => t._id && handleDeleteTask(t._id)}
-                                title="Delete Task"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* RIGHT COLUMN: CONTROLS */}
+                <div className="body-pad" style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 28 }}>
+                  {/* LEFT COLUMN: CONTROLS */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                     {/* ADD MANUAL TASK */}
                     <div className="form-card">
@@ -2242,6 +2174,74 @@ export default function GoalsPage() {
                             </div>
                           )}
                         </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* RIGHT COLUMN: TASK LIST */}
+                  <div>
+                    <div className="section-hd">
+                      <span className="section-hd-label">Tasks for {selectedDate === new Date().toISOString().split("T")[0] ? "Today" : selectedDate}</span>
+                      <div className="section-hd-rule" />
+                    </div>
+
+                    {dailyTasks.filter(t => t.date === selectedDate).length === 0 ? (
+                      <div className="empty-state" style={{ padding: "64px 32px" }}>
+                        <div className="empty-state-icon">📋</div>
+                        <div className="empty-state-title">No tasks for this day</div>
+                        <p className="empty-state-sub">Use the sidebar panels to add tasks manually or generate them with AI.</p>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+                        {dailyTasks.filter(t => t.date === selectedDate).map(t => {
+                          const linkedGoal = goals.find(g => g._id === t.goalId);
+                          const dc = linkedGoal ? DC[linkedGoal.domain] : null;
+
+                          return (
+                            <div
+                              key={t._id}
+                              className="goal-preview-row"
+                              style={{
+                                cursor: "default",
+                                borderLeft: dc ? `4px solid ${dc.color}` : "1px solid rgba(0,0,0,0.07)",
+                                padding: "12px 16px"
+                              }}
+                            >
+                              <div
+                                className={`ms-checkbox ${t.completed ? "ms-checkbox-done" : ""}`}
+                                style={t.completed && dc ? { background: dc.color, borderColor: dc.color } : t.completed ? { background: BRAND, borderColor: BRAND } : {}}
+                                onClick={() => t._id && handleToggleTask(t._id, t.completed)}
+                              >
+                                {t.completed && <CheckCircle2 size={10} color="#fff" />}
+                              </div>
+
+                              <div style={{ flex: 1, minWidth: 0, paddingLeft: 6 }}>
+                                <span
+                                  className={`ms-text ${t.completed ? "ms-check-done" : ""}`}
+                                  style={{ fontSize: "0.85rem", fontWeight: 600, color: t.completed ? "var(--text-muted)" : "var(--text-primary)" }}
+                                >
+                                  {t.text}
+                                </span>
+                                {linkedGoal && (
+                                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                                    <span className="tag tag-neutral" style={{ fontSize: "0.6rem", padding: "1px 6px" }}>
+                                      {linkedGoal.title}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <button
+                                className="gc-btn gc-btn-del"
+                                style={{ opacity: 1 }}
+                                onClick={() => t._id && handleDeleteTask(t._id)}
+                                title="Delete Task"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

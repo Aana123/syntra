@@ -49,6 +49,7 @@ export interface TwinContext {
   relations?: any;
   supportNetwork?: any[];
   familyOutflows?: any;
+  bloodMarkers?: Array<{ name: string; status: "high" | "low"; value: number; unit: string }>;
 }
 
 export interface DomainScores {

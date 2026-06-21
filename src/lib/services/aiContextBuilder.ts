@@ -274,6 +274,20 @@ function calculateTwinContext(
   const sleepCareerCorrelation = sleepCareerDays > 0;
   const workoutMoodCorrelation = loggedMoodDays > 0 && lowMoodNoWorkoutDays > 0;
 
+  // ─── Blood report abnormal markers (deduplicated, most-recent value wins) ──
+  const bloodMarkers: Array<{ name: string; status: "high" | "low"; value: number; unit: string }> = [];
+  const seenMarkerNames = new Set<string>();
+  for (const log of healthLogs) {
+    const metrics = log.domainData?.blood_report?.metrics;
+    if (!Array.isArray(metrics)) continue;
+    for (const m of metrics) {
+      if ((m.status === "high" || m.status === "low") && m.name && !seenMarkerNames.has(m.name)) {
+        seenMarkerNames.add(m.name);
+        bloodMarkers.push({ name: m.name, status: m.status, value: m.value ?? 0, unit: m.unit ?? "" });
+      }
+    }
+  }
+
   return {
     weeklyAverages: {
       sleep: avgSleep,
@@ -321,6 +335,7 @@ function calculateTwinContext(
     relations: userProfile?.relations || null,
     supportNetwork: userProfile?.supportNetwork || [],
     familyOutflows: userProfile?.familyOutflows || null,
+    bloodMarkers,
   };
 }
 

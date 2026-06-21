@@ -92,11 +92,11 @@ const domainWidgetsSchema = z.object({
     health: z.object({
       todaysMealPlan: z.array(
         z.object({
-          meal:     z.string().min(2).max(30),
-          items:    z.string().min(10).max(200),
-          prepTime: z.string().min(2).max(15),
-          calories: z.number().int().min(50).max(1500),
-          fix:      z.string().min(5).max(80),
+          meal:     z.string().min(2).max(40),
+          items:    z.string().min(10).max(400),
+          prepTime: z.string().min(2).max(20),
+          calories: z.number().min(50).max(2000).transform(v => Math.round(v)),
+          fix:      z.string().min(5).max(200),
         })
       ).min(3).max(5),
     }),
@@ -104,25 +104,25 @@ const domainWidgetsSchema = z.object({
       smartMoneyChecklist: z.array(
         z.object({
           done:  z.boolean(),
-          title: z.string().min(5).max(80),
-          sub:   z.string().min(10).max(200),
+          title: z.string().min(5).max(120),
+          sub:   z.string().min(10).max(400),
         })
       ).min(2).max(5),
     }),
     career: z.object({
       paretoSkills: z.array(
         z.object({
-          skill:        z.string().min(2).max(60),
+          skill:        z.string().min(2).max(80),
           priority:     z.enum(["High", "Medium", "Low"]),
-          hoursRequired:z.string().min(1).max(20),
-          source:       z.string().min(2).max(80),
+          hoursRequired:z.string().min(1).max(30),
+          source:       z.string().min(2).max(150),
         })
       ).min(2).max(5),
       studyBlocks: z.array(
         z.object({
-          day:   z.string().min(3).max(40),
-          time:  z.string().min(5).max(40),
-          focus: z.string().min(5).max(120),
+          day:   z.string().min(3).max(60),
+          time:  z.string().min(5).max(60),
+          focus: z.string().min(5).max(200),
         })
       ).min(2).max(5),
     }),
@@ -270,6 +270,16 @@ function detectRisks(context: TwinContext, trajectory: TrajectorySignals): strin
     if (contactName) {
       risks.push(`SUPPORT OUTREACH: Consider reaching out to your support contact ${contactName} (${contactTag}) to talk through your current state, lower cortisol, and restore emotional sync.`);
     }
+  }
+
+  // Blood report abnormal markers — highest-priority clinical signals
+  const bloodMarkers: Array<{ name: string; status: string; value: number; unit: string }> = (context as any).bloodMarkers || [];
+  for (const marker of bloodMarkers.slice(0, 3)) {
+    const dir = marker.status === "high" ? "elevated" : "low";
+    const impact = marker.status === "high"
+      ? "may indicate inflammation, metabolic stress, or organ strain"
+      : "may be causing fatigue, immune suppression, or cognitive fog";
+    risks.push(`BLOOD MARKER ALERT: ${marker.name} is ${dir} (${marker.value}${marker.unit ? " " + marker.unit : ""}) — this clinically detected signal from your lab report ${impact}. Discuss with your doctor and adjust diet or activity accordingly.`);
   }
 
   return risks;
@@ -468,6 +478,12 @@ export function buildaitwinReflectionPrompt(
 
   const trajectory = calculateTrajectory(context, scores);
   const risks = detectRisks(context, trajectory);
+
+  const bloodMarkersCtx = (context as any).bloodMarkers as Array<{ name: string; status: string; value: number; unit: string }> | undefined;
+  const bloodMarkersBlock = bloodMarkersCtx && bloodMarkersCtx.length > 0
+    ? `LAB RESULTS FROM UPLOADED BLOOD REPORT:\n${bloodMarkersCtx.map(m => `  - ${m.name}: ${m.value}${m.unit ? " " + m.unit : ""} [${m.status.toUpperCase()}]`).join("\n")}\n(Use these exact values in health recommendations and riskAlerts. Do NOT say "your recent labs" vaguely — name the specific marker and value.)`
+    : "No blood report uploaded.";
+
   // Only inject few-shot calibration example for new users (<15 logs).
   // Power users have enough real data signals — skipping saves ~800 tokens per call.
   const selectedExample = context.logCount < 15
@@ -562,6 +578,8 @@ HYDRATION & NUTRITION:
   Meal skip pattern:   ${context.qualitative.skippedMealPattern}
   Meals & Foods Eaten (Recent Logs):
 ${context.qualitative.recentMealsEaten && context.qualitative.recentMealsEaten.length > 0 ? context.qualitative.recentMealsEaten.map((m, i) => `    Day ${i + 1}: "${m}"`).join("\n") : "    No specific food logs submitted yet. Nudge the user to start logging meals."}
+
+${bloodMarkersBlock}
 
 SPENDING INTELLIGENCE:
   Top expenses:        ${context.qualitative.topExpenseNames.length > 0 ? context.qualitative.topExpenseNames.join(", ") : "No spending pattern data yet"}

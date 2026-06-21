@@ -409,6 +409,7 @@ ${isImage ? "" : `\n--- DOCUMENT TEXT ---\n${extractedText.slice(0, 5000)}`}
     }
 
     // 5. RECALCULATE SCORES & GAMIFICATION
+    const scoresBefore = { health: user.scores.health ?? 50, finance: user.scores.finance ?? 50, career: user.scores.career ?? 50 };
     if (["blood_report", "prescription", "health_checkup", "fitness_assessment"].includes(category)) {
       if (category === "health_checkup" && validatedData.vitals) {
         const w = validatedData.vitals.weight;
@@ -470,6 +471,7 @@ ${isImage ? "" : `\n--- DOCUMENT TEXT ---\n${extractedText.slice(0, 5000)}`}
     user.markModified("scores");
     user.markModified("gamification");
     await user.save();
+    const scoresAfter = { health: user.scores.health ?? 50, finance: user.scores.finance ?? 50, career: user.scores.career ?? 50 };
 
     // Trigger AI snapshot pre-generation to update Twin Insights (forced regeneration)
     try {
@@ -488,7 +490,10 @@ ${isImage ? "" : `\n--- DOCUMENT TEXT ---\n${extractedText.slice(0, 5000)}`}
       success: true,
       category,
       message: summaryMessage,
-      data: validatedData
+      data: validatedData,
+      scoresBefore,
+      scoresAfter,
+      xpEarned: 50,
     }, { status: 200 });
 
   } catch (error: any) {

@@ -408,6 +408,7 @@ export const POST = apiHandler(async (req: Request) => {
   await Log.insertMany(parsedLogs);
 
   // 2. Exponential Trailing Moving Average recalculation on each imported record
+  const scoresBefore = { health: user.scores.health ?? 50, finance: user.scores.finance ?? 50, career: user.scores.career ?? 50 };
   const smoothingFactor = 0.25;
   let currentScore = user.scores[domain as keyof typeof user.scores] || 50;
 
@@ -474,6 +475,7 @@ export const POST = apiHandler(async (req: Request) => {
   user.markModified("gamification");
   user.markModified("badges");
   await user.save();
+  const scoresAfter = { health: user.scores.health ?? 50, finance: user.scores.finance ?? 50, career: user.scores.career ?? 50 };
 
   // 3. Fire the protected background task (with the pre-fetched / updated user)
   waitUntil(
@@ -483,8 +485,12 @@ export const POST = apiHandler(async (req: Request) => {
   );
 
   // 4. Return immediately to the user (Lightning fast UX!)
-  return NextResponse.json({ 
-    success: true, 
-    message: `Successfully imported ${parsedLogs.length} logs. Syntra Core is analyzing the data.` 
+  return NextResponse.json({
+    success: true,
+    domain,
+    message: `Successfully imported ${parsedLogs.length} logs. Syntra Core is analyzing the data.`,
+    scoresBefore,
+    scoresAfter,
+    xpEarned: 50,
   }, { status: 201 });
 });

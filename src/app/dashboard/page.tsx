@@ -481,11 +481,8 @@ export default function DashboardPage() {
     return d;
   };
 
-  const idealPts = chartData.map((d, i) => ({ x: getX(i), y: getY(d.ideal) }));
   const actualPts = chartData.map((d, i) => ({ x: getX(i), y: getY(d.actual) }));
-  const idealLinePath = makeSmoothPath(idealPts);
   const actualLinePath = makeSmoothPath(actualPts);
-  const idealAreaPath = idealPts.length > 0 ? `${idealLinePath} L ${idealPts[idealPts.length-1].x} ${baselineY} L ${padLeft} ${baselineY} Z` : "";
   const actualAreaPath = actualPts.length > 0 ? `${actualLinePath} L ${actualPts[actualPts.length-1].x} ${baselineY} L ${padLeft} ${baselineY} Z` : "";
 
   const totalDone = chartData.reduce((s, d) => s + d.actual, 0);
@@ -1088,149 +1085,78 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* ── ACTIVE GOALS & TRAJECTORY ── */}
+        {/* ── DAILY TASKS & TRAJECTORY ── */}
         <div className="section-header">
-          <span className="section-tag">Active Goals & Trajectory</span>
+          <span className="section-tag">Daily Tasks & Trajectory</span>
           <div className="section-line" />
         </div>
 
         <div className="lower-grid" style={{ marginBottom: 56 }}>
-          {/* LEFT — Active Focus Goals */}
+          {/* LEFT — Today's Daily Tasks */}
           <div className="active-goals-panel">
-            <div className="panel-title-block" style={{ marginBottom: 20 }}>
-              <h2 className="panel-title" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "1.3rem", fontWeight: 800, color: "#111" }}>Active Focus Goals</h2>
-              <p className="panel-sub" style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.8rem", color: "#9ca3af", fontWeight: 500 }}>Complete milestones to level up your Neural Twin</p>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div>
+                <h2 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "1.3rem", fontWeight: 800, color: "#111", margin: 0 }}>Today's Tasks</h2>
+                <p style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.8rem", color: "#9ca3af", fontWeight: 500, margin: "4px 0 0" }}>
+                  {(() => { const t = dailyTasks.filter((t: any) => (t.date as string)?.split("T")[0] === todayStr); return `${t.filter((t: any) => t.completed).length}/${t.length} completed today`; })()}
+                </p>
+              </div>
+              <Link href="/goals" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "0.78rem", fontWeight: 700, color: "#0055EE", background: "#f0f4ff", border: "1.5px solid #d0dfff", borderRadius: 10, padding: "7px 13px", textDecoration: "none", whiteSpace: "nowrap" }}>
+                <Target size={12} /> Manage Goals
+              </Link>
             </div>
 
-          {goals.length === 0 ? (
-            <div className="dash-goals-empty" style={{ textAlign: "center", padding: "40px 20px", border: "1.5px dashed #e8ebf4", borderRadius: 20, background: "#fff" }}>
-              <Target size={28} style={{ color: "#9ca3af", marginBottom: 8, margin: "0 auto 10px" }} />
-              <div className="dash-empty-title" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "1rem", fontWeight: 800, color: "#111", marginBottom: 4 }}>No Active Goals</div>
-              <p className="dash-empty-sub" style={{ fontSize: "0.82rem", color: "#7788aa", lineHeight: 1.5, marginBottom: 16 }}>Create a goal to start tracking progress and milestones.</p>
-              <Link href="/goals" className="dash-goals-btn" style={{ display: "inline-flex", alignItems: "center", padding: "8px 16px", background: "#0055EE", color: "#fff", borderRadius: 10, textDecoration: "none", fontSize: "0.8rem", fontWeight: 700 }}>Set A Goal</Link>
-            </div>
-          ) : (
-            <div className="dash-goals-stack" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {goals.slice(0, 3).map((g, index) => {
-                const dc = DC[g.domain] || DC.health;
-                const total = g.milestones?.length ?? 0;
-                const done  = g.milestones?.filter(m => m.completed).length ?? 0;
-                const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
-                const isExpanded = expandedGoals[g._id || ""] ?? (index === 0);
-                const p = PRIO[g.priority] || PRIO.medium;
-                
-                const todayTasksForCard = dailyTasks.filter((t: any) =>
-                  t.goalId === g._id && (t.date as string)?.split("T")[0] === todayStr
-                );
-                const todayTasksDone = todayTasksForCard.filter((t: any) => t.completed).length;
+            {(() => {
+              const todayAllTasks = dailyTasks.filter((t: any) => (t.date as string)?.split("T")[0] === todayStr);
+              const todayDone = todayAllTasks.filter((t: any) => t.completed).length;
+              const pct = todayAllTasks.length > 0 ? Math.round((todayDone / todayAllTasks.length) * 100) : 0;
+              const pctColor = pct >= 80 ? "#16a34a" : pct >= 50 ? "#f59e0b" : "#0055EE";
 
+              if (todayAllTasks.length === 0) {
                 return (
-                  <div key={g._id || index} className="dash-goal-card" style={{ background: "#ffffff", border: "1px solid #e8ebf4", borderRadius: 20, overflow: "hidden", display: "flex", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-                    <div className="dash-goal-bar" style={{ width: 5, background: dc.color, flexShrink: 0 }} />
-                    <div className="dash-goal-card-body" style={{ flex: 1, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 11 }}>
-                      <div className="dash-goal-header" style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }} onClick={() => setExpandedGoals(prev => ({ ...prev, [g._id || ""]: !isExpanded }))}>
-                        <div className="dash-goal-domain-icon" style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: dc.bg, color: dc.color, flexShrink: 0 }}>{dc.icon}</div>
-                        <div className="dash-goal-meta" style={{ flex: 1, minWidth: 0 }}>
-                          <h3 className="dash-goal-title" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.88rem", fontWeight: 800, color: "#111", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.title}</h3>
-                          <div className="dash-goal-tags" style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
-                            <span className="tag" style={{ background: p.bg, color: p.color, fontSize: "0.62rem", fontWeight: 700, padding: "2px 6px", borderRadius: 9999 }}>{p.emoji} {p.label}</span>
-                            <span className="tag tag-neutral" style={{ background: "#EEF2F8", color: "#64748B", fontSize: "0.62rem", fontWeight: 700, padding: "2px 6px", borderRadius: 9999 }}>{dc.label}</span>
-                            {todayTasksForCard.length > 0 && (
-                              <span style={{ background: todayTasksDone === todayTasksForCard.length ? "rgba(22,163,74,0.1)" : "rgba(0,85,238,0.07)", color: todayTasksDone === todayTasksForCard.length ? "#16a34a" : "#0055EE", fontSize: "0.62rem", fontWeight: 700, padding: "2px 6px", borderRadius: 9999, display: "inline-flex", alignItems: "center", gap: 3 }}>
-                                <CheckCircle2 size={8}/> {todayTasksDone}/{todayTasksForCard.length} tasks
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <div className="dash-goal-pct-block" style={{ textAlign: "right", marginRight: 8 }}>
-                          <span className="dash-goal-pct-text" style={{ display: "block", fontSize: "0.95rem", fontWeight: 800, color: dc.color, lineHeight: 1 }}>{pct}%</span>
-                          <span className="dash-goal-pct-sub" style={{ fontSize: "0.65rem", color: "#9ca3af", fontWeight: 500 }}>{done}/{total} steps</span>
-                        </div>
-
-                        <button className="dash-goal-chevron" style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", display: "flex", alignItems: "center" }}>
-                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        </button>
-                      </div>
-
-                      <div className="dash-goal-progress-bar" style={{ height: 4, background: "#EEF1F8", borderRadius: 9999, overflow: "hidden" }}>
-                        <div className="dash-goal-progress-fill" style={{ height: "100%", width: `${pct}%`, background: dc.color, borderRadius: 9999, transition: "width 0.6s ease" }} />
-                      </div>
-
-                      {isExpanded && total > 0 && (
-                        <div className="dash-goal-milestones" style={{ background: "#F5F8FC", border: "1px solid #E8EDF5", borderRadius: 12, padding: "11px 14px", display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
-                          <div style={{ fontSize: "0.6rem", fontWeight: 800, color: "#7788aa", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Milestones</div>
-                          {g.milestones?.map((m) => (
-                            <div key={m._id} className="dash-ms-row" style={{ display: "flex", alignItems: "center", gap: 10, position: "relative" }}>
-                              <div
-                                className={`dash-ms-checkbox ${m.completed ? "done" : ""}`}
-                                style={{
-                                  width: 18, height: 18, borderRadius: 5, border: m.completed ? `1px solid ${dc.color}` : "2.5px solid #BFC9D8",
-                                  background: m.completed ? dc.color : "transparent",
-                                  display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.18s"
-                                }}
-                                onClick={() => g._id && m._id && handleToggleMilestone(g._id, m._id, m.completed)}
-                              >
-                                {m.completed && <CheckCircle2 size={10} color="#fff" />}
-                              </div>
-                              <span className={`dash-ms-text ${m.completed ? "done" : ""}`} style={{ fontSize: "0.78rem", fontWeight: 500, color: m.completed ? "#8a9bb5" : "#0d1117", textDecoration: m.completed ? "line-through" : "none", flex: 1 }}>{m.text}</span>
-                              {floatId === m._id && <span className="xp-float" style={{ position: "absolute", right: 0, top: -4, fontSize: "0.71rem", fontWeight: 800, color: "#16a34a", pointerEvents: "none", whiteSpace: "nowrap" }}>+100 XP 🎉</span>}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Today's Daily Tasks */}
-                      {isExpanded && (() => {
-                        const todayTasks = dailyTasks.filter((t: any) =>
-                          t.goalId === g._id && (t.date as string)?.split("T")[0] === todayStr
-                        );
-                        if (todayTasks.length === 0) return null;
-                        const tasksDone = todayTasks.filter((t: any) => t.completed).length;
-                        return (
-                          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 12, padding: "11px 14px", display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                              <div style={{ fontSize: "0.6rem", fontWeight: 800, color: "#16a34a", textTransform: "uppercase", letterSpacing: "0.1em" }}>Today's Tasks</div>
-                              <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#16a34a", background: "rgba(22,163,74,0.1)", padding: "1px 7px", borderRadius: 9999 }}>{tasksDone}/{todayTasks.length} done</span>
-                            </div>
-                            {todayTasks.map((t: any) => (
-                              <div key={t._id} style={{ display: "flex", alignItems: "center", gap: 9, position: "relative" }}>
-                                <div
-                                  style={{
-                                    width: 17, height: 17, borderRadius: 5,
-                                    border: t.completed ? "1px solid #16a34a" : "2px solid #BFC9D8",
-                                    background: t.completed ? "#16a34a" : "transparent",
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    cursor: "pointer", flexShrink: 0, transition: "all 0.18s"
-                                  }}
-                                  onClick={() => t._id && handleToggleTask(t._id, t.completed)}
-                                >
-                                  {t.completed && <CheckCircle2 size={9} color="#fff" />}
-                                </div>
-                                <span style={{
-                                  fontSize: "0.77rem", fontWeight: 500, flex: 1,
-                                  color: t.completed ? "#86efac" : "#0d1117",
-                                  textDecoration: t.completed ? "line-through" : "none",
-                                }}>
-                                  {t.text}
-                                </span>
-                                {taskFloatId === t._id && (
-                                  <span className="xp-float" style={{ position: "absolute", right: 0, top: -4, fontSize: "0.71rem", fontWeight: 800, color: "#16a34a", pointerEvents: "none", whiteSpace: "nowrap" }}>+20 XP ⚡</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
+                  <div style={{ textAlign: "center", padding: "40px 20px", border: "1.5px dashed #e8ebf4", borderRadius: 20, background: "#fff" }}>
+                    <CheckCircle2 size={28} style={{ color: "#9ca3af", margin: "0 auto 10px" }} />
+                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "1rem", fontWeight: 800, color: "#111", marginBottom: 4 }}>No tasks for today</div>
+                    <p style={{ fontSize: "0.82rem", color: "#7788aa", lineHeight: 1.5, marginBottom: 16 }}>Head to Goals to create daily tasks and link them to your goals.</p>
+                    <Link href="/goals" style={{ display: "inline-flex", alignItems: "center", padding: "8px 16px", background: "#0055EE", color: "#fff", borderRadius: 10, textDecoration: "none", fontSize: "0.8rem", fontWeight: 700 }}>Set Up Daily Tasks</Link>
                   </div>
                 );
-              })}
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <Link href="/goals" className="dash-goals-link" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.78rem", fontWeight: 700, color: "#0055EE", textDecoration: "none" }}>Manage all goals <ChevronRight size={13} /></Link>
-              </div>
-            </div>
-          )}
+              }
+
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {/* Progress bar */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                    <div style={{ flex: 1, height: 5, background: "#EEF1F8", borderRadius: 9999, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${pct}%`, background: pctColor, borderRadius: 9999, transition: "width 0.6s ease" }} />
+                    </div>
+                    <span style={{ fontSize: "0.75rem", fontWeight: 800, color: pctColor, flexShrink: 0 }}>{pct}%</span>
+                  </div>
+                  {/* Task rows */}
+                  {todayAllTasks.map((t: any) => {
+                    const linkedGoal = goals.find((g: any) => g._id === t.goalId);
+                    const dc = linkedGoal ? DC[linkedGoal.domain] : null;
+                    return (
+                      <div key={t._id} style={{ position: "relative", background: "#fff", border: "1px solid #e8ebf4", borderLeft: dc ? `4px solid ${dc.color}` : "4px solid #e8ebf4", borderRadius: 16, padding: "13px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
+                        <div
+                          style={{ width: 20, height: 20, borderRadius: 6, border: t.completed ? "1px solid #16a34a" : "2px solid #BFC9D8", background: t.completed ? "#16a34a" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.18s" }}
+                          onClick={() => t._id && handleToggleTask(t._id, t.completed)}
+                        >
+                          {t.completed && <CheckCircle2 size={11} color="#fff" />}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: "0.85rem", fontWeight: 600, color: t.completed ? "#9ca3af" : "#0d1117", textDecoration: t.completed ? "line-through" : "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.text}</span>
+                          {linkedGoal && (
+                            <span style={{ fontSize: "0.62rem", fontWeight: 700, color: dc ? dc.color : "#64748b", background: dc ? `${dc.color}12` : "#EEF1F8", padding: "1px 6px", borderRadius: 9999, marginTop: 3, display: "inline-block" }}>{linkedGoal.title}</span>
+                          )}
+                        </div>
+                        {taskFloatId === t._id && <span className="xp-float" style={{ position: "absolute", right: 16, top: -4, fontSize: "0.71rem", fontWeight: 800, color: "#16a34a", pointerEvents: "none", whiteSpace: "nowrap" }}>+20 XP ⚡</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
 
           {/* RIGHT — Current Trajectory Chart */}
@@ -1240,7 +1166,7 @@ export default function DashboardPage() {
               <div>
                 <div className="proj-title">Current Trajectory</div>
                 <div className="proj-sub">
-                  Ideal vs actual task completion ·{" "}
+                  Task completion ·{" "}
                   <span style={{ color: "#0055EE", fontWeight: 700 }}>
                     {RANGE_OPTIONS.find(o => o.value === projectionRange)?.label}
                   </span>
@@ -1278,10 +1204,6 @@ export default function DashboardPage() {
                 style={{ width: "100%", height: chartH, overflow: "visible", display: "block" }}
               >
                 <defs>
-                  <linearGradient id="trajIdealGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#93c5fd" stopOpacity="0.22" />
-                    <stop offset="100%" stopColor="#93c5fd" stopOpacity="0" />
-                  </linearGradient>
                   <linearGradient id="trajActualGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#0055EE" stopOpacity="0.14" />
                     <stop offset="100%" stopColor="#0055EE" stopOpacity="0" />
@@ -1304,12 +1226,8 @@ export default function DashboardPage() {
                 <line x1={padLeft} y1={baselineY} x2={chartW - padRight} y2={baselineY} stroke="#e2e8f0" strokeWidth="1.5" />
                 <line x1={padLeft} y1={padTop} x2={padLeft} y2={baselineY} stroke="#e2e8f0" strokeWidth="1.5" />
 
-                {/* Area fills */}
-                {idealAreaPath && <path d={idealAreaPath} fill="url(#trajIdealGrad)" />}
+                {/* Area fill */}
                 {actualAreaPath && <path d={actualAreaPath} fill="url(#trajActualGrad)" />}
-
-                {/* Ideal line */}
-                {idealLinePath && <path d={idealLinePath} fill="none" stroke="#93c5fd" strokeWidth="1.5" strokeDasharray="5 3" />}
 
                 {/* Actual line */}
                 {actualLinePath && <path d={actualLinePath} fill="none" stroke="#0055EE" strokeWidth="3" strokeLinecap="round" style={{ filter: "drop-shadow(0 3px 6px rgba(0,85,238,0.22))" }} />}
@@ -1337,12 +1255,10 @@ export default function DashboardPage() {
                 {/* Data points & labels */}
                 {chartData.map((pt, i) => {
                   const x = getX(i);
-                  const yI = getY(pt.ideal);
                   const yA = getY(pt.actual);
                   const isHov = hoveredIdx === i;
                   return (
                     <g key={i}>
-                      <circle cx={x} cy={yI} r={isHov ? 4 : 2.5} fill="#93c5fd" stroke={isHov ? "#fff" : "none"} strokeWidth="1.5" />
                       <circle cx={x} cy={yA} r={isHov ? 6 : pt.isToday ? 5 : 4} fill={pt.isToday ? "#22c55e" : "#0055EE"} stroke="#fff" strokeWidth="2"
                         style={{ filter: isHov ? "drop-shadow(0 2px 8px rgba(0,85,238,0.5))" : "none" }}
                       />
@@ -1376,7 +1292,6 @@ export default function DashboardPage() {
               {/* Floating Tooltip */}
               {hoveredIdx !== null && chartData[hoveredIdx] && (() => {
                 const pt = chartData[hoveredIdx];
-                const delta = pt.actual - 100;
                 const xPct = ((getX(hoveredIdx) - padLeft) / usableW) * 100;
                 const onLeft = xPct < 55;
                 return (
@@ -1405,13 +1320,6 @@ export default function DashboardPage() {
                           <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#64748b" }}>{pt.done} / {pt.total}</span>
                         </div>
                       )}
-                      <div style={{ height: 1, background: "#f0f2f8" }} />
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: "0.8rem", color: "#64748b" }}>vs Ideal</span>
-                        <span style={{ fontSize: "0.85rem", fontWeight: 700, color: delta >= 0 ? "#16a34a" : "#ef4444" }}>
-                          {delta >= 0 ? `+${delta}` : delta}%
-                        </span>
-                      </div>
                     </div>
                     <div style={{ height: 4, background: "#f1f5f9", borderRadius: 2, overflow: "hidden", marginTop: 11 }}>
                       <div style={{ height: "100%", width: `${Math.min(pt.actual, 100)}%`, background: pt.actual >= 80 ? "#16a34a" : pt.actual >= 50 ? "#f59e0b" : "#ef4444", borderRadius: 2 }} />
@@ -1423,10 +1331,6 @@ export default function DashboardPage() {
 
             {/* Legend + Summary Stats */}
             <div style={{ display: "flex", gap: 14, alignItems: "center", borderTop: "1px solid #f0f2f8", paddingTop: 14, marginTop: 14, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.76rem", fontWeight: 600, color: "#64748b" }}>
-                <span style={{ width: 14, height: 0, borderTop: "2px dashed #93c5fd", display: "inline-block" }} />
-                100% Target
-              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.76rem", fontWeight: 600, color: "#0055EE" }}>
                 <span style={{ width: 14, height: 3, background: "#0055EE", display: "inline-block", borderRadius: 2 }} />
                 Your Path

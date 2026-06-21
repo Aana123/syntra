@@ -4,6 +4,7 @@ import Log from "@/models/Log";
 import { calculateSyntraCore } from "@/lib/logic/scoring";
 import mongoose from "mongoose";
 import { ApiError } from "@/lib/utils/apiError";
+import { carryForwardGoalTasks } from "@/lib/utils/carryForwardTasks";
 
 
 /**
@@ -38,6 +39,9 @@ export async function getDashboardData(userId: string, email: string) {
       await user.save(); // Save decayed streak to the database
     }
   }
+
+  // Carry goal-linked tasks from previous days forward to today (fresh + unchecked)
+  await carryForwardGoalTasks(user);
 
   // 3. Calculate the Global Dashboard Metric
   const syntraCoreScore = calculateSyntraCore(

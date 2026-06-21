@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
+import { mutate as globalMutate } from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { NetWorthPanel } from "@/components/NetWorthPanel";
@@ -39,6 +40,13 @@ interface LatestData {
 }
 
 type SidebarPanel = "manual" | "social" | "assets" | "uploads" | "api";
+type UploadResult = {
+  category?: string;
+  domain?: string;
+  scoresBefore?: { health: number; finance: number; career: number };
+  scoresAfter?: { health: number; finance: number; career: number };
+  xpEarned?: number;
+};
 
 const NAV_LINKS = [
   { href: "/dashboard",          label: "Dashboard" },
@@ -568,16 +576,17 @@ function formatIngestionError(errorMsg: any): string {
 }
 
 /* ─── UPLOADS PANEL ──────────────────────────────────────────────── */
-function UploadsPanel({ onSuccess }: { onSuccess: () => void }) {
+function UploadsPanel({ onSuccess }: { onSuccess: (scores?: { health: number; finance: number; career: number }) => void }) {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadDomain, setUploadDomain] = useState<"health" | "finance" | "career">("health");
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [activeType, setActiveType] = useState<"pdf" | "csv" | "excel">("pdf");
 
   const handleUpload = async () => {
     if (!uploadFile) { setUploadMsg({ text: "Select a file first.", ok: false }); return; }
-    setUploadLoading(true); setUploadMsg(null);
+    setUploadLoading(true); setUploadMsg(null); setUploadResult(null);
     const fd = new FormData(); fd.append("file", uploadFile); fd.append("domain", uploadDomain);
     try {
       let endpoint = "/api/upload/excel";
@@ -610,9 +619,16 @@ function UploadsPanel({ onSuccess }: { onSuccess: () => void }) {
         throw new Error(formatIngestionError(d.message || d.error || "Upload failed."));
       }
 
+      setUploadResult({
+        category: d?.category,
+        domain: d?.domain || uploadDomain,
+        scoresBefore: d?.scoresBefore,
+        scoresAfter: d?.scoresAfter,
+        xpEarned: d?.xpEarned ?? 50,
+      });
       setUploadMsg({ text: (d && d.message) || "File uploaded successfully!", ok: true });
       setUploadFile(null);
-      onSuccess();
+      onSuccess(d?.scoresAfter);
     } catch (err: any) { setUploadMsg({ text: err.message || "Upload failed.", ok: false }); }
     finally { setUploadLoading(false); }
   };
@@ -685,6 +701,49 @@ function UploadsPanel({ onSuccess }: { onSuccess: () => void }) {
               <div className={`upload-msg${uploadMsg.ok ? " ok" : " err"}`}>
                 {uploadMsg.ok ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
                 {uploadMsg.text}
+              </div>
+            )}
+
+            {uploadResult && uploadMsg?.ok && (
+              <div className="upload-result-card">
+                <div className="urc-head">
+                  <Sparkles size={14} />
+                  <span>What Changed</span>
+                  <span className="urc-xp-badge">+{uploadResult.xpEarned ?? 50} XP</span>
+                </div>
+                {uploadResult.scoresBefore && uploadResult.scoresAfter && (
+                  <div className="urc-scores">
+                    {(["health", "finance", "career"] as const).map(dom => {
+                      const before = uploadResult.scoresBefore![dom];
+                      const after = uploadResult.scoresAfter![dom];
+                      const delta = after - before;
+                      if (delta === 0) return null;
+                      const pos = delta > 0;
+                      const domColor = dom === "health" ? "#16a34a" : dom === "finance" ? "#2563eb" : "#7c3aed";
+                      const domBg = dom === "health" ? "#f0fdf4" : dom === "finance" ? "#eff6ff" : "#f5f3ff";
+                      return (
+                        <div key={dom} className="urc-score-row">
+                          <span className="urc-domain-pill" style={{ color: domColor, background: domBg }}>
+                            {dom === "health" ? "Health" : dom === "finance" ? "Finance" : "Career"}
+                          </span>
+                          <span className="urc-score-nums">
+                            <span className="urc-num-before">{before}</span>
+                            <span className="urc-arrow"> → </span>
+                            <span className="urc-num-after" style={{ color: pos ? "#16a34a" : "#dc2626" }}>{after}</span>
+                          </span>
+                          <span className="urc-delta" style={{ color: pos ? "#16a34a" : "#dc2626" }}>
+                            {pos ? "+" : ""}{delta} pts
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {uploadResult.category && (
+                  <div className="urc-category">
+                    Detected: <strong>{uploadResult.category.replace(/_/g, " ")}</strong>
+                  </div>
+                )}
               </div>
             )}
 
@@ -786,8 +845,16 @@ function IngestionPage() {
         if (!d.success) return;
         setLatest(d.latest);
         if (d.scores) setCurrentScores(d.scores);
+        // Bust global SWR cache so insights page re-fetches after navigation
+        globalMutate("/api/ai/recommend");
+        globalMutate("/api/ai/widgets");
         window.dispatchEvent(new Event("syntra-refresh"));
       }).catch(() => {});
+  };
+
+  const handleUploadSuccess = (scores?: { health: number; finance: number; career: number }) => {
+    if (scores) setCurrentScores(scores);
+    refreshLatest();
   };
 
   useEffect(() => {
@@ -1451,6 +1518,19 @@ function IngestionPage() {
         .upload-msg { display: flex; align-items: flex-start; gap: 8px; padding: 10px 14px; border-radius: 11px; font-size: 0.79rem; font-weight: 600; white-space: pre-wrap; }
         .upload-msg.ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
         .upload-msg.err { background: #fef2f2; border: 1px solid #fca5a5; color: #dc2626; }
+        .upload-result-card { background: #f8f7ff; border: 1px solid #ddd6fe; border-radius: 13px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+        .urc-head { display: flex; align-items: center; gap: 7px; font-size: 0.8rem; font-weight: 800; color: #7c3aed; }
+        .urc-xp-badge { margin-left: auto; background: #7c3aed; color: #fff; font-size: 0.66rem; font-weight: 800; padding: 2px 10px; border-radius: 99px; letter-spacing: 0.04em; }
+        .urc-scores { display: flex; flex-direction: column; gap: 7px; }
+        .urc-score-row { display: flex; align-items: center; gap: 8px; }
+        .urc-domain-pill { font-size: 0.69rem; font-weight: 800; padding: 3px 9px; border-radius: 99px; text-transform: capitalize; flex-shrink: 0; }
+        .urc-score-nums { display: flex; align-items: center; font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin-left: auto; }
+        .urc-num-before { color: var(--text-muted); }
+        .urc-arrow { color: var(--text-muted); font-size: 0.75rem; }
+        .urc-num-after { font-weight: 800; }
+        .urc-delta { font-size: 0.72rem; font-weight: 800; min-width: 48px; text-align: right; }
+        .urc-category { font-size: 0.72rem; color: var(--text-muted); border-top: 1px solid #ddd6fe; padding-top: 9px; text-transform: capitalize; }
+        .urc-category strong { color: var(--text-primary); font-weight: 700; }
 
         /* ── PROCESSING ── */
         .proc-root { min-height: 100vh; background: var(--bg-deep); display: flex; align-items: center; justify-content: center; padding: 24px; }
@@ -2073,7 +2153,7 @@ function IngestionPage() {
             {/* ── UPLOADS ── */}
             {activePanel === "uploads" && (
               <div className="screen">
-                <UploadsPanel onSuccess={refreshLatest} />
+                <UploadsPanel onSuccess={handleUploadSuccess} />
               </div>
             )}
 

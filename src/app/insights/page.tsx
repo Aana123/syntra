@@ -224,17 +224,17 @@ export default function InsightsPage() {
     dedupingInterval: 300000, revalidateOnFocus: false, errorRetryCount: 1,
   });
 
-  const { data: widgetsData, isLoading: widgetsLoading } = useSWR<any>(
+  const { data: widgetsData, isLoading: widgetsLoading, mutate: mutateWidgets } = useSWR<any>(
     activeSection === 1 ? "/api/ai/widgets" : null,
     fetcher,
     { dedupingInterval: 300000, revalidateOnFocus: false, errorRetryCount: 1 }
   );
 
   useEffect(() => {
-    const refresh = () => mutate();
+    const refresh = () => { mutate(); mutateWidgets(); };
     window.addEventListener("syntra-refresh", refresh);
     return () => window.removeEventListener("syntra-refresh", refresh);
-  }, [mutate]);
+  }, [mutate, mutateWidgets]);
 
   const ai: AIResponse | null = data?.ai || null;
   const isCalib = (ai?.confidence || 0) <= 10;
@@ -340,6 +340,7 @@ export default function InsightsPage() {
       case 1: {
         const financeData = data?.finance || {};
         const domainColor    = domainTab === "health" ? HEALTH_C : domainTab === "finance" ? FINANCE_C : CAREER_C;
+        const widgetsFailed = widgetsData?.success === false;
         const isWidgetsLoading = widgetsLoading && !widgetsData && !ai?.domainWidgets;
 
         if (isWidgetsLoading) {
@@ -371,6 +372,19 @@ export default function InsightsPage() {
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
                 <Loader2 size={30} style={{ color: domainColor, animation: "spin 1.1s linear infinite", marginBottom: 12 }}/>
                 <p style={{ fontSize: "0.85rem", color: "#52637A", fontWeight: 600 }}>Syncing personalised domain widgets...</p>
+              </div>
+            </div>
+          );
+        }
+
+        if (widgetsFailed) {
+          return (
+            <div className={`sec-wrap ${animating ? "sec-exit" : "sec-enter"}`}>
+              <SectionHeader icon={BarChart3} title="Health, Finance & Career Breakdown" sub="A closer look at each area of your life" color={domainColor}/>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, gap: 14 }}>
+                <RefreshCw size={28} style={{ color: domainColor, opacity: 0.55 }}/>
+                <p style={{ fontSize: "0.87rem", color: "#52637A", fontWeight: 600, margin: 0 }}>Couldn't generate domain widgets — Syntra hit an issue.</p>
+                <button className="btn-outline btn-sm" onClick={() => mutateWidgets()}><RefreshCw size={12}/> Try Again</button>
               </div>
             </div>
           );

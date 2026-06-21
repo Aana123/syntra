@@ -5,6 +5,7 @@ import { connectDB } from "@/lib/database/mongodb";
 import User from "@/models/User";
 import mongoose from "mongoose";
 import { z } from "zod";
+import { carryForwardGoalTasks } from "@/lib/utils/carryForwardTasks";
 
 
 const MilestoneSchema = z.object({
@@ -93,11 +94,12 @@ export async function GET() {
 
     await connectDB();
     const user = await User.findOne({ email: session.user.email });
+    if (user) await carryForwardGoalTasks(user);
 
-    return NextResponse.json({ 
-      success: true, 
-      goals: user?.goals || [], 
-      dailyTasks: user?.dailyTasks || [], 
+    return NextResponse.json({
+      success: true,
+      goals: user?.goals || [],
+      dailyTasks: user?.dailyTasks || [],
       badges: user?.badges || [],
       gamification: user?.gamification || { totalPoints: 0, currentStreak: 0, lastLogDate: null },
       scores: user?.scores || { health: 50, finance: 50, career: 50 }
