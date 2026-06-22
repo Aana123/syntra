@@ -6,7 +6,6 @@ import User from "@/models/User";
 import Log from "@/models/Log";
 import { callGemini } from "@/lib/services/gemini";
 import { IngestionSchemaMap } from "@/lib/validators/ingestionSchemas";
-import { PDFParse } from "pdf-parse";
 import { createWorker } from "tesseract.js";
 import { rl } from "@/lib/utils/rateLimit";
 import { generateAndStoreSnapshot } from "@/lib/services/snapshotService";
@@ -129,6 +128,14 @@ export async function POST(req: Request) {
       };
     } else if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
       try {
+        if (typeof global !== "undefined" && typeof (global as any).DOMMatrix === "undefined") {
+          (global as any).DOMMatrix = class DOMMatrix {};
+        }
+        if (typeof global !== "undefined" && typeof (global as any).Path2D === "undefined") {
+          (global as any).Path2D = class Path2D {};
+        }
+        
+        const { PDFParse } = await import("pdf-parse");
         const parser = new PDFParse({ data: buffer });
         const pdfData = await parser.getText();
         extractedText = pdfData.text || "";

@@ -11,11 +11,11 @@ import { generateAndStoreSnapshot } from "@/lib/services/snapshotService";
 import { recalculateStreak } from "@/lib/logic/streak";
 import { apiHandler } from "@/lib/utils/apiHandler";
 import { ApiError } from "@/lib/utils/apiError";
-import { 
-  calculateHealthScore, 
-  calculateFinanceScore, 
-  calculateCareerScore, 
-  calculateEarnedXP 
+import {
+  calculateHealthScore,
+  calculateFinanceScore,
+  calculateCareerScore,
+  calculateEarnedXP
 } from "@/lib/logic/scoring";
 
 // A robust, RFC-4180 compliant CSV parser
@@ -75,7 +75,7 @@ const parseCSV = (csvText: string): string[][] => {
 // Helper to normalize column headers with support for common aliases and typos
 function normalizeHeader(h: string): string {
   const clean = h.replace(/[^a-zA-Z0-9]/g, "").toLowerCase().trim();
-  
+
   // Date aliases
   if (/^(date|logdate)$/i.test(clean)) {
     return "date";
@@ -343,7 +343,7 @@ export const POST = apiHandler(async (req: Request) => {
     finance: ["date", "amountsaved", "discretionaryspent"],
     career: ["date", "hoursstudied", "productivityrating"]
   };
-  
+
   // Define normalized valid columns
   const validCols: Record<string, string[]> = {
     health: ["date", "sleephours", "workoutminutes", "stresslevel", "moodscore", "energylevel", "caloriesconsumed", "caloriegoal", "waterglasses", "mealseatentoday"],
@@ -389,7 +389,7 @@ export const POST = apiHandler(async (req: Request) => {
     "caloriesconsumed", "caloriegoal", "waterglasses", "amountsaved", "discretionaryspent",
     "spendingtime", "hoursstudied", "productivityrating", "sessionscompleted"
   ];
-  
+
   const camelCaseMap: Record<string, string> = {
     sleephours: "sleepHours",
     workoutminutes: "workoutMinutes",
@@ -420,12 +420,12 @@ export const POST = apiHandler(async (req: Request) => {
     const row = dataRows[i];
     const record: Record<string, any> = {};
     let rawDateVal = "";
-    
+
     for (let j = 0; j < headers.length; j++) {
       const header = headers[j];
       if (!header) continue;
       const val = row[j] || "";
-      
+
       const normalizedHeader = normalizeHeader(header);
       const standardHeader = camelCaseMap[normalizedHeader] || header;
 
@@ -440,7 +440,7 @@ export const POST = apiHandler(async (req: Request) => {
         record[standardHeader] = typeof val === "string" && /^[=\+\-\@]/.test(val) ? `'${val}` : val;
       }
     }
-    
+
     // Server-side validation
     validateRow(domain, record, rawDateVal, i + 2);
 

@@ -1,5 +1,13 @@
 //src/lib/mongodb.ts
 import mongoose from "mongoose";
+import dns from "dns";
+
+// Set DNS servers to work around querySrv ECONNREFUSED in Node.js on some systems (especially Windows)
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch (e) {
+  console.warn("Could not set DNS servers:", e);
+}
 
 // 1. Establish the global cache object
 let globalWithMongoose = global as typeof globalThis & {
